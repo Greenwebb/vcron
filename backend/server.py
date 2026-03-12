@@ -115,6 +115,11 @@ POSITIONS = [
     "Other"
 ]
 
+AREAS_OF_ALLOCATION = [
+    "Facility",
+    "Outreach"
+]
+
 # ===================== PYDANTIC MODELS =====================
 
 class UserBase(BaseModel):
@@ -122,6 +127,7 @@ class UserBase(BaseModel):
     name: str
     position: Optional[str] = None
     facility: Optional[str] = None
+    area_of_allocation: Optional[str] = None
     picture: Optional[str] = None
     role: str = "user"
 
@@ -131,6 +137,7 @@ class UserCreate(BaseModel):
     name: str
     position: str
     facility: str
+    area_of_allocation: str
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -142,6 +149,7 @@ class UserResponse(BaseModel):
     name: str
     position: Optional[str] = None
     facility: Optional[str] = None
+    area_of_allocation: Optional[str] = None
     picture: Optional[str] = None
     role: str = "user"
     created_at: Optional[str] = None
@@ -150,6 +158,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     position: Optional[str] = None
     facility: Optional[str] = None
+    area_of_allocation: Optional[str] = None
     role: Optional[str] = None
 
 class AttendanceRecord(BaseModel):
@@ -158,6 +167,7 @@ class AttendanceRecord(BaseModel):
     user_name: str
     position: str
     facility: str
+    area_of_allocation: Optional[str] = None
     action: str  # "login" or "logout"
     timestamp: str
     latitude: Optional[float] = None
@@ -263,11 +273,13 @@ async def register(user_data: UserCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Validate facility and position
+    # Validate facility, position, and area
     if user_data.facility not in FACILITIES:
         raise HTTPException(status_code=400, detail="Invalid facility")
     if user_data.position not in POSITIONS:
         raise HTTPException(status_code=400, detail="Invalid position")
+    if user_data.area_of_allocation not in AREAS_OF_ALLOCATION:
+        raise HTTPException(status_code=400, detail="Invalid area of allocation")
     
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     hashed_password = hash_password(user_data.password)
@@ -279,6 +291,7 @@ async def register(user_data: UserCreate):
         "password": hashed_password,
         "position": user_data.position,
         "facility": user_data.facility,
+        "area_of_allocation": user_data.area_of_allocation,
         "picture": None,
         "role": "user",
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -297,6 +310,7 @@ async def register(user_data: UserCreate):
             name=user_data.name,
             position=user_data.position,
             facility=user_data.facility,
+            area_of_allocation=user_data.area_of_allocation,
             role="user",
             created_at=user_doc["created_at"]
         )
@@ -335,6 +349,7 @@ async def login(credentials: UserLogin, response: Response):
             name=user["name"],
             position=user.get("position"),
             facility=user.get("facility"),
+            area_of_allocation=user.get("area_of_allocation"),
             picture=user.get("picture"),
             role=user.get("role", "user"),
             created_at=user.get("created_at")
@@ -425,9 +440,10 @@ async def process_session(request: Request, response: Response):
         "name": user["name"],
         "position": user.get("position"),
         "facility": user.get("facility"),
+        "area_of_allocation": user.get("area_of_allocation"),
         "picture": user.get("picture"),
         "role": user.get("role", "user"),
-        "needs_registration": user.get("position") is None or user.get("facility") is None
+        "needs_registration": user.get("position") is None or user.get("facility") is None or user.get("area_of_allocation") is None
     }
 
 @api_router.get("/auth/me", response_model=UserResponse)
@@ -438,6 +454,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         name=user["name"],
         position=user.get("position"),
         facility=user.get("facility"),
+        area_of_allocation=user.get("area_of_allocation"),
         picture=user.get("picture"),
         role=user.get("role", "user"),
         created_at=user.get("created_at")
@@ -448,18 +465,21 @@ async def complete_registration(request: Request, user: dict = Depends(get_curre
     body = await request.json()
     position = body.get("position")
     facility = body.get("facility")
+    area_of_allocation = body.get("area_of_allocation")
     
-    if not position or not facility:
-        raise HTTPException(status_code=400, detail="Position and facility are required")
+    if not position or not facility or not area_of_allocation:
+        raise HTTPException(status_code=400, detail="Position, facility, and area of allocation are required")
     
     if facility not in FACILITIES:
         raise HTTPException(status_code=400, detail="Invalid facility")
     if position not in POSITIONS:
         raise HTTPException(status_code=400, detail="Invalid position")
+    if area_of_allocation not in AREAS_OF_ALLOCATION:
+        raise HTTPException(status_code=400, detail="Invalid area of allocation")
     
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {"position": position, "facility": facility}}
+        {"$set": {"position": position, "facility": facility, "area_of_allocation": area_of_allocation}}
     )
     
     updated_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -470,6 +490,7 @@ async def complete_registration(request: Request, user: dict = Depends(get_curre
         name=updated_user["name"],
         position=updated_user.get("position"),
         facility=updated_user.get("facility"),
+        area_of_allocation=updated_user.get("area_of_allocation"),
         picture=updated_user.get("picture"),
         role=updated_user.get("role", "user"),
         created_at=updated_user.get("created_at")
@@ -494,6 +515,10 @@ async def get_facilities():
 async def get_positions():
     return {"positions": POSITIONS}
 
+@api_router.get("/areas")
+async def get_areas():
+    return {"areas": AREAS_OF_ALLOCATION}
+
 # ===================== ATTENDANCE ROUTES =====================
 
 @api_router.post("/attendance", response_model=AttendanceRecord)
@@ -512,6 +537,7 @@ async def create_attendance(attendance: AttendanceCreate, user: dict = Depends(g
         "user_name": user["name"],
         "position": user["position"],
         "facility": user["facility"],
+        "area_of_allocation": user.get("area_of_allocation"),
         "action": attendance.action,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "latitude": attendance.latitude,

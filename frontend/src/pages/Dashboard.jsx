@@ -68,7 +68,7 @@ const Dashboard = () => {
         if (response.ok) {
           const userData = await response.json();
           // Check if user needs to complete registration
-          if (!userData.position || !userData.facility) {
+          if (!userData.position || !userData.facility || !userData.area_of_allocation) {
             navigate("/complete-registration", { state: { user: userData } });
             return;
           }
@@ -412,6 +412,10 @@ const Dashboard = () => {
                   <div className="flex items-center gap-1">
                     <Building2 className="w-4 h-4 text-slate-400" />
                     <span data-testid="user-facility">{user?.facility}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-4 h-4 text-slate-400" />
+                    <span data-testid="user-area">{user?.area_of_allocation}</span>
                   </div>
                 </div>
               </div>
