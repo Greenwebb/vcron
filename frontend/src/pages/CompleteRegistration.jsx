@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Clock, Building2, Briefcase, MapPin } from "lucide-react";
+import { Clock, Building2, Briefcase, MapPin, Phone } from "lucide-react";
 import { API } from "@/App";
 
 const CompleteRegistration = () => {
@@ -19,6 +20,7 @@ const CompleteRegistration = () => {
   const [facilities, setFacilities] = useState([]);
   const [positions, setPositions] = useState([]);
   const [formData, setFormData] = useState({
+    phone_number: "",
     position: "",
     province: "",
     district: "",
@@ -114,6 +116,13 @@ const CompleteRegistration = () => {
     }));
   };
 
+  const handleChange = (e) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -158,6 +167,24 @@ const CompleteRegistration = () => {
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone_number" className="text-slate-700">Phone Number</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <Input
+                  id="phone_number"
+                  name="phone_number"
+                  type="tel"
+                  placeholder="+260 97X XXX XXX"
+                  value={formData.phone_number}
+                  onChange={handleChange}
+                  className="pl-10 h-12 border-slate-200"
+                  required
+                  data-testid="phone-input"
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="position" className="text-slate-700">Position/Designation</Label>
               <Select 
@@ -247,7 +274,7 @@ const CompleteRegistration = () => {
             <Button 
               type="submit" 
               className="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white rounded-xl"
-              disabled={loading || !formData.position || !formData.province || !formData.district || !formData.facility}
+              disabled={loading || !formData.phone_number || !formData.position || !formData.province || !formData.district || !formData.facility}
               data-testid="complete-registration-btn"
             >
               {loading ? (

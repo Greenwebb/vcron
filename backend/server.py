@@ -161,6 +161,7 @@ AREAS_OF_ALLOCATION = [
 class UserBase(BaseModel):
     email: EmailStr
     name: str
+    phone_number: Optional[str] = None
     position: Optional[str] = None
     province: Optional[str] = None
     district: Optional[str] = None
@@ -173,6 +174,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     name: str
+    phone_number: str
     position: str
     province: str
     district: str
@@ -186,6 +188,7 @@ class UserResponse(BaseModel):
     user_id: str
     email: str
     name: str
+    phone_number: Optional[str] = None
     position: Optional[str] = None
     province: Optional[str] = None
     district: Optional[str] = None
@@ -197,6 +200,7 @@ class UserResponse(BaseModel):
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
+    phone_number: Optional[str] = None
     position: Optional[str] = None
     province: Optional[str] = None
     district: Optional[str] = None
@@ -343,6 +347,7 @@ async def register(user_data: UserCreate):
         "user_id": user_id,
         "email": user_data.email,
         "name": user_data.name,
+        "phone_number": user_data.phone_number,
         "password": hashed_password,
         "position": user_data.position,
         "province": user_data.province,
@@ -364,6 +369,7 @@ async def register(user_data: UserCreate):
             user_id=user_id,
             email=user_data.email,
             name=user_data.name,
+            phone_number=user_data.phone_number,
             position=user_data.position,
             province=user_data.province,
             district=user_data.district,
@@ -404,6 +410,7 @@ async def login(credentials: UserLogin, response: Response):
             user_id=user["user_id"],
             email=user["email"],
             name=user["name"],
+            phone_number=user.get("phone_number"),
             position=user.get("position"),
             province=user.get("province"),
             district=user.get("district"),
@@ -497,6 +504,7 @@ async def process_session(request: Request, response: Response):
         "user_id": user["user_id"],
         "email": user["email"],
         "name": user["name"],
+        "phone_number": user.get("phone_number"),
         "position": user.get("position"),
         "province": user.get("province"),
         "district": user.get("district"),
@@ -513,6 +521,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         user_id=user["user_id"],
         email=user["email"],
         name=user["name"],
+        phone_number=user.get("phone_number"),
         position=user.get("position"),
         province=user.get("province"),
         district=user.get("district"),
@@ -526,13 +535,14 @@ async def get_me(user: dict = Depends(get_current_user)):
 @api_router.post("/auth/complete-registration", response_model=UserResponse)
 async def complete_registration(request: Request, user: dict = Depends(get_current_user)):
     body = await request.json()
+    phone_number = body.get("phone_number")
     position = body.get("position")
     province = body.get("province")
     district = body.get("district")
     facility = body.get("facility")
     
-    if not position or not province or not district or not facility:
-        raise HTTPException(status_code=400, detail="Position, province, district, and facility are required")
+    if not phone_number or not position or not province or not district or not facility:
+        raise HTTPException(status_code=400, detail="Phone number, position, province, district, and facility are required")
     
     # Validate province
     province_names = [p["name"] for p in PROVINCES]
@@ -555,7 +565,7 @@ async def complete_registration(request: Request, user: dict = Depends(get_curre
     
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {"position": position, "province": province, "district": district, "facility": facility}}
+        {"$set": {"phone_number": phone_number, "position": position, "province": province, "district": district, "facility": facility}}
     )
     
     updated_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -564,6 +574,7 @@ async def complete_registration(request: Request, user: dict = Depends(get_curre
         user_id=updated_user["user_id"],
         email=updated_user["email"],
         name=updated_user["name"],
+        phone_number=updated_user.get("phone_number"),
         position=updated_user.get("position"),
         province=updated_user.get("province"),
         district=updated_user.get("district"),

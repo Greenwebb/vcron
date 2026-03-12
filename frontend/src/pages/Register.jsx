@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Clock, Mail, Lock, User, Building2, Briefcase, ArrowLeft, MapPin } from "lucide-react";
+import { Clock, Mail, Lock, User, Building2, Briefcase, ArrowLeft, MapPin, Phone } from "lucide-react";
 import { API } from "@/App";
 
 const Register = () => {
@@ -19,6 +19,7 @@ const Register = () => {
   const [positions, setPositions] = useState([]);
   const [formData, setFormData] = useState({
     name: "",
+    phone_number: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -131,6 +132,7 @@ const Register = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name,
+          phone_number: formData.phone_number,
           email: formData.email,
           password: formData.password,
           position: formData.position,
@@ -231,6 +233,24 @@ const Register = () => {
                     className="pl-10 h-12 border-slate-200"
                     required
                     data-testid="name-input"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone_number" className="text-slate-700">Phone Number</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Input
+                    id="phone_number"
+                    name="phone_number"
+                    type="tel"
+                    placeholder="+260 97X XXX XXX"
+                    value={formData.phone_number}
+                    onChange={handleChange}
+                    className="pl-10 h-12 border-slate-200"
+                    required
+                    data-testid="phone-input"
                   />
                 </div>
               </div>
