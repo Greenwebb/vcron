@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { 
   Clock, 
@@ -39,6 +41,8 @@ const Dashboard = () => {
   const [locationError, setLocationError] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingSync, setPendingSync] = useState(0);
+  const [areas, setAreas] = useState([]);
+  const [selectedArea, setSelectedArea] = useState("");
 
   // Check online status
   useEffect(() => {
@@ -57,6 +61,22 @@ const Dashboard = () => {
     };
   }, []);
 
+  // Fetch areas of allocation
+  useEffect(() => {
+    const fetchAreas = async () => {
+      try {
+        const response = await fetch(`${API}/areas`);
+        if (response.ok) {
+          const data = await response.json();
+          setAreas(data.areas || []);
+        }
+      } catch (error) {
+        console.error("Error fetching areas:", error);
+      }
+    };
+    fetchAreas();
+  }, []);
+
   // Always fetch fresh user data from API
   useEffect(() => {
     const fetchUser = async () => {
@@ -67,8 +87,8 @@ const Dashboard = () => {
         
         if (response.ok) {
           const userData = await response.json();
-          // Check if user needs to complete registration
-          if (!userData.position || !userData.facility || !userData.area_of_allocation) {
+          // Check if user needs to complete registration (position and facility only)
+          if (!userData.position || !userData.facility) {
             navigate("/complete-registration", { state: { user: userData } });
             return;
           }
