@@ -49,56 +49,92 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ===================== FACILITIES LIST =====================
-FACILITIES = [
-    "Chalata Rural Health Centre",
-    "Changilo Health Post",
-    "Chibwemukunga Health Post",
-    "Nambo Rural Health Post",
-    "Ntekete Health Post",
-    "Chibefwe Health Centre",
-    "Milombwe Health Post",
-    "Tazara Health Post",
-    "Mulundu Health Post",
-    "Chitina Health Post",
-    "Chikabile Health Post",
-    "Kabengeshi Rural Health Post",
-    "Kakushi Health Post",
-    "Luanshimba Rural Health Centre (Mkushi)",
-    "Mboboli Rural Health Post",
-    "Mulungwe Rural Health Centre",
-    "Matuku Health Post",
-    "Miloso Health Post",
-    "Momboshi Health Post",
-    "Twatasha Health Post",
-    "Fibanga Health Post",
-    "Munsakamba Health Post",
-    "Katuba Health Post",
-    "Nkulumashiba Rural Health Post",
-    "Chisanga Rural Health Centre",
-    "Musofu Rural Health Centre",
-    "Upper Musofu Health Post",
-    "Chengelo Clinic",
-    "Kasalamakanga Health Post",
-    "Nkolonga Farm Clinic",
-    "Nkolonga Health Post",
-    "Chine Rural Health Post",
-    "Fiwila Rural Health Centre",
-    "Kalubula Rural Health Post",
-    "Nyenje Health Post",
-    "Shaibila Health Post",
-    "Kasokota Health Post",
-    "Mikunku Rural Health Centre",
-    "Nkumbi College Clinic",
-    "Nkumbi Rural Health Centre",
-    "Lilanda Health Post",
-    "Malubila Health Post",
-    "Mankanda Health Post",
-    "Milele Health Post",
-    "Nshinso Rural Health Centre",
-    "Upper Lusemfwa Health Post",
-    "Mkushi District Hospital"
+# ===================== PROVINCES LIST =====================
+PROVINCES = [
+    {"id": 1, "name": "Central Province"},
+    {"id": 2, "name": "Copperbelt Province"},
+    {"id": 3, "name": "Eastern Province"},
+    {"id": 4, "name": "Luapula Province"},
+    {"id": 5, "name": "Lusaka Province"},
+    {"id": 6, "name": "Muchinga Province"},
+    {"id": 7, "name": "Northern Province"},
+    {"id": 8, "name": "North-Western Province"},
+    {"id": 9, "name": "Southern Province"},
+    {"id": 10, "name": "Western Province"}
 ]
+
+# ===================== DISTRICTS BY PROVINCE =====================
+DISTRICTS = {
+    "Central Province": [
+        "Chibombo",
+        "Chisamba",
+        "Chitambo",
+        "Kabwe",
+        "Kapiri Mposhi",
+        "Luano",
+        "Mkushi",
+        "Mumbwa",
+        "Ngabwe",
+        "Serenje",
+        "Shibuyunji"
+    ]
+}
+
+# ===================== FACILITIES BY DISTRICT =====================
+FACILITIES_BY_DISTRICT = {
+    "Mkushi": [
+        "Chalata Rural Health Centre",
+        "Changilo Health Post",
+        "Chibwemukunga Health Post",
+        "Nambo Rural Health Post",
+        "Ntekete Health Post",
+        "Chibefwe Health Centre",
+        "Milombwe Health Post",
+        "Tazara Health Post",
+        "Mulundu Health Post",
+        "Chitina Health Post",
+        "Chikabile Health Post",
+        "Kabengeshi Rural Health Post",
+        "Kakushi Health Post",
+        "Luanshimba Rural Health Centre (Mkushi)",
+        "Mboboli Rural Health Post",
+        "Mulungwe Rural Health Centre",
+        "Matuku Health Post",
+        "Miloso Health Post",
+        "Momboshi Health Post",
+        "Twatasha Health Post",
+        "Fibanga Health Post",
+        "Munsakamba Health Post",
+        "Katuba Health Post",
+        "Nkulumashiba Rural Health Post",
+        "Chisanga Rural Health Centre",
+        "Musofu Rural Health Centre",
+        "Upper Musofu Health Post",
+        "Chengelo Clinic",
+        "Kasalamakanga Health Post",
+        "Nkolonga Farm Clinic",
+        "Nkolonga Health Post",
+        "Chine Rural Health Post",
+        "Fiwila Rural Health Centre",
+        "Kalubula Rural Health Post",
+        "Nyenje Health Post",
+        "Shaibila Health Post",
+        "Kasokota Health Post",
+        "Mikunku Rural Health Centre",
+        "Nkumbi College Clinic",
+        "Nkumbi Rural Health Centre",
+        "Lilanda Health Post",
+        "Malubila Health Post",
+        "Mankanda Health Post",
+        "Milele Health Post",
+        "Nshinso Rural Health Centre",
+        "Upper Lusemfwa Health Post",
+        "Mkushi District Hospital"
+    ]
+}
+
+# Legacy FACILITIES list for backward compatibility
+FACILITIES = FACILITIES_BY_DISTRICT.get("Mkushi", [])
 
 POSITIONS = [
     "Nurse",
@@ -126,6 +162,8 @@ class UserBase(BaseModel):
     email: EmailStr
     name: str
     position: Optional[str] = None
+    province: Optional[str] = None
+    district: Optional[str] = None
     facility: Optional[str] = None
     area_of_allocation: Optional[str] = None
     picture: Optional[str] = None
@@ -136,6 +174,8 @@ class UserCreate(BaseModel):
     password: str
     name: str
     position: str
+    province: str
+    district: str
     facility: str
 
 class UserLogin(BaseModel):
@@ -147,6 +187,8 @@ class UserResponse(BaseModel):
     email: str
     name: str
     position: Optional[str] = None
+    province: Optional[str] = None
+    district: Optional[str] = None
     facility: Optional[str] = None
     area_of_allocation: Optional[str] = None
     picture: Optional[str] = None
@@ -156,6 +198,8 @@ class UserResponse(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     position: Optional[str] = None
+    province: Optional[str] = None
+    district: Optional[str] = None
     facility: Optional[str] = None
     area_of_allocation: Optional[str] = None
     role: Optional[str] = None
@@ -273,9 +317,22 @@ async def register(user_data: UserCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Validate facility and position
-    if user_data.facility not in FACILITIES:
-        raise HTTPException(status_code=400, detail="Invalid facility")
+    # Validate province
+    province_names = [p["name"] for p in PROVINCES]
+    if user_data.province not in province_names:
+        raise HTTPException(status_code=400, detail="Invalid province")
+    
+    # Validate district
+    districts = DISTRICTS.get(user_data.province, [])
+    if user_data.district not in districts:
+        raise HTTPException(status_code=400, detail="Invalid district for selected province")
+    
+    # Validate facility
+    facilities = FACILITIES_BY_DISTRICT.get(user_data.district, [])
+    if user_data.facility not in facilities:
+        raise HTTPException(status_code=400, detail="Invalid facility for selected district")
+    
+    # Validate position
     if user_data.position not in POSITIONS:
         raise HTTPException(status_code=400, detail="Invalid position")
     
@@ -288,6 +345,8 @@ async def register(user_data: UserCreate):
         "name": user_data.name,
         "password": hashed_password,
         "position": user_data.position,
+        "province": user_data.province,
+        "district": user_data.district,
         "facility": user_data.facility,
         "picture": None,
         "role": "user",
@@ -306,6 +365,8 @@ async def register(user_data: UserCreate):
             email=user_data.email,
             name=user_data.name,
             position=user_data.position,
+            province=user_data.province,
+            district=user_data.district,
             facility=user_data.facility,
             role="user",
             created_at=user_doc["created_at"]
@@ -344,6 +405,8 @@ async def login(credentials: UserLogin, response: Response):
             email=user["email"],
             name=user["name"],
             position=user.get("position"),
+            province=user.get("province"),
+            district=user.get("district"),
             facility=user.get("facility"),
             area_of_allocation=user.get("area_of_allocation"),
             picture=user.get("picture"),
@@ -435,11 +498,13 @@ async def process_session(request: Request, response: Response):
         "email": user["email"],
         "name": user["name"],
         "position": user.get("position"),
+        "province": user.get("province"),
+        "district": user.get("district"),
         "facility": user.get("facility"),
         "area_of_allocation": user.get("area_of_allocation"),
         "picture": user.get("picture"),
         "role": user.get("role", "user"),
-        "needs_registration": user.get("position") is None or user.get("facility") is None or user.get("area_of_allocation") is None
+        "needs_registration": user.get("position") is None or user.get("facility") is None
     }
 
 @api_router.get("/auth/me", response_model=UserResponse)
@@ -449,6 +514,8 @@ async def get_me(user: dict = Depends(get_current_user)):
         email=user["email"],
         name=user["name"],
         position=user.get("position"),
+        province=user.get("province"),
+        district=user.get("district"),
         facility=user.get("facility"),
         area_of_allocation=user.get("area_of_allocation"),
         picture=user.get("picture"),
@@ -460,19 +527,35 @@ async def get_me(user: dict = Depends(get_current_user)):
 async def complete_registration(request: Request, user: dict = Depends(get_current_user)):
     body = await request.json()
     position = body.get("position")
+    province = body.get("province")
+    district = body.get("district")
     facility = body.get("facility")
     
-    if not position or not facility:
-        raise HTTPException(status_code=400, detail="Position and facility are required")
+    if not position or not province or not district or not facility:
+        raise HTTPException(status_code=400, detail="Position, province, district, and facility are required")
     
-    if facility not in FACILITIES:
-        raise HTTPException(status_code=400, detail="Invalid facility")
+    # Validate province
+    province_names = [p["name"] for p in PROVINCES]
+    if province not in province_names:
+        raise HTTPException(status_code=400, detail="Invalid province")
+    
+    # Validate district
+    districts = DISTRICTS.get(province, [])
+    if district not in districts:
+        raise HTTPException(status_code=400, detail="Invalid district for selected province")
+    
+    # Validate facility
+    facilities = FACILITIES_BY_DISTRICT.get(district, [])
+    if facility not in facilities:
+        raise HTTPException(status_code=400, detail="Invalid facility for selected district")
+    
+    # Validate position
     if position not in POSITIONS:
         raise HTTPException(status_code=400, detail="Invalid position")
     
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {"position": position, "facility": facility}}
+        {"$set": {"position": position, "province": province, "district": district, "facility": facility}}
     )
     
     updated_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -482,6 +565,8 @@ async def complete_registration(request: Request, user: dict = Depends(get_curre
         email=updated_user["email"],
         name=updated_user["name"],
         position=updated_user.get("position"),
+        province=updated_user.get("province"),
+        district=updated_user.get("district"),
         facility=updated_user.get("facility"),
         area_of_allocation=updated_user.get("area_of_allocation"),
         picture=updated_user.get("picture"),
@@ -511,6 +596,20 @@ async def get_positions():
 @api_router.get("/areas")
 async def get_areas():
     return {"areas": AREAS_OF_ALLOCATION}
+
+@api_router.get("/provinces")
+async def get_provinces():
+    return {"provinces": PROVINCES}
+
+@api_router.get("/districts/{province}")
+async def get_districts(province: str):
+    districts = DISTRICTS.get(province, [])
+    return {"province": province, "districts": districts}
+
+@api_router.get("/facilities/{district}")
+async def get_facilities_by_district(district: str):
+    facilities = FACILITIES_BY_DISTRICT.get(district, [])
+    return {"district": district, "facilities": facilities}
 
 # ===================== ATTENDANCE ROUTES =====================
 

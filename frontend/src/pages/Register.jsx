@@ -7,12 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Clock, Mail, Lock, User, Building2, Briefcase, ArrowLeft } from "lucide-react";
+import { Clock, Mail, Lock, User, Building2, Briefcase, ArrowLeft, MapPin } from "lucide-react";
 import { API } from "@/App";
 
 const Register = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [provinces, setProvinces] = useState([]);
+  const [districts, setDistricts] = useState([]);
   const [facilities, setFacilities] = useState([]);
   const [positions, setPositions] = useState([]);
   const [formData, setFormData] = useState({
@@ -21,22 +23,24 @@ const Register = () => {
     password: "",
     confirmPassword: "",
     position: "",
+    province: "",
+    district: "",
     facility: ""
   });
 
+  // Fetch provinces and positions on mount
   useEffect(() => {
-    // Fetch facilities and positions
     const fetchData = async () => {
       try {
-        const [facilitiesRes, positionsRes] = await Promise.all([
-          fetch(`${API}/facilities`),
+        const [provincesRes, positionsRes] = await Promise.all([
+          fetch(`${API}/provinces`),
           fetch(`${API}/positions`)
         ]);
         
-        const facilitiesData = await facilitiesRes.json();
+        const provincesData = await provincesRes.json();
         const positionsData = await positionsRes.json();
         
-        setFacilities(facilitiesData.facilities || []);
+        setProvinces(provincesData.provinces || []);
         setPositions(positionsData.positions || []);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -45,6 +49,52 @@ const Register = () => {
     
     fetchData();
   }, []);
+
+  // Fetch districts when province changes
+  useEffect(() => {
+    if (!formData.province) {
+      setDistricts([]);
+      setFacilities([]);
+      return;
+    }
+
+    const fetchDistricts = async () => {
+      try {
+        const response = await fetch(`${API}/districts/${encodeURIComponent(formData.province)}`);
+        const data = await response.json();
+        setDistricts(data.districts || []);
+        // Reset district and facility when province changes
+        setFormData(prev => ({ ...prev, district: "", facility: "" }));
+        setFacilities([]);
+      } catch (error) {
+        console.error("Error fetching districts:", error);
+      }
+    };
+    
+    fetchDistricts();
+  }, [formData.province]);
+
+  // Fetch facilities when district changes
+  useEffect(() => {
+    if (!formData.district) {
+      setFacilities([]);
+      return;
+    }
+
+    const fetchFacilities = async () => {
+      try {
+        const response = await fetch(`${API}/facilities/${encodeURIComponent(formData.district)}`);
+        const data = await response.json();
+        setFacilities(data.facilities || []);
+        // Reset facility when district changes
+        setFormData(prev => ({ ...prev, facility: "" }));
+      } catch (error) {
+        console.error("Error fetching facilities:", error);
+      }
+    };
+    
+    fetchFacilities();
+  }, [formData.district]);
 
   const handleChange = (e) => {
     setFormData(prev => ({
@@ -84,6 +134,8 @@ const Register = () => {
           email: formData.email,
           password: formData.password,
           position: formData.position,
+          province: formData.province,
+          district: formData.district,
           facility: formData.facility
         }),
         credentials: "include"
@@ -106,7 +158,6 @@ const Register = () => {
   };
 
   const handleGoogleSignup = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
     const redirectUrl = window.location.origin + '/dashboard';
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
@@ -224,15 +275,59 @@ const Register = () => {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="province" className="text-slate-700">Province</Label>
+                <Select 
+                  value={formData.province} 
+                  onValueChange={(value) => handleSelectChange("province", value)}
+                  required
+                >
+                  <SelectTrigger className="h-12 border-slate-200" data-testid="province-select">
+                    <MapPin className="w-5 h-5 text-slate-400 mr-2" />
+                    <SelectValue placeholder="Select your province" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {provinces.map((province) => (
+                      <SelectItem key={province.id} value={province.name}>
+                        {province.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="district" className="text-slate-700">District</Label>
+                <Select 
+                  value={formData.district} 
+                  onValueChange={(value) => handleSelectChange("district", value)}
+                  disabled={!formData.province || districts.length === 0}
+                  required
+                >
+                  <SelectTrigger className="h-12 border-slate-200" data-testid="district-select">
+                    <MapPin className="w-5 h-5 text-slate-400 mr-2" />
+                    <SelectValue placeholder={formData.province ? (districts.length ? "Select your district" : "No districts available") : "Select province first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {districts.map((district) => (
+                      <SelectItem key={district} value={district}>
+                        {district}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="facility" className="text-slate-700">Facility</Label>
                 <Select 
                   value={formData.facility} 
                   onValueChange={(value) => handleSelectChange("facility", value)}
+                  disabled={!formData.district || facilities.length === 0}
                   required
                 >
                   <SelectTrigger className="h-12 border-slate-200" data-testid="facility-select">
                     <Building2 className="w-5 h-5 text-slate-400 mr-2" />
-                    <SelectValue placeholder="Select your facility" />
+                    <SelectValue placeholder={formData.district ? (facilities.length ? "Select your facility" : "No facilities available") : "Select district first"} />
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
                     {facilities.map((facility) => (
@@ -283,7 +378,7 @@ const Register = () => {
               <Button 
                 type="submit" 
                 className="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white rounded-xl"
-                disabled={loading || !formData.position || !formData.facility}
+                disabled={loading || !formData.position || !formData.province || !formData.district || !formData.facility}
                 data-testid="register-submit-btn"
               >
                 {loading ? (
