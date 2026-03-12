@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Clock, Building2, Briefcase, MapPin } from "lucide-react";
+import { Clock, Building2, Briefcase } from "lucide-react";
 import { API } from "@/App";
 
 const CompleteRegistration = () => {
@@ -16,11 +16,9 @@ const CompleteRegistration = () => {
   const [loading, setLoading] = useState(false);
   const [facilities, setFacilities] = useState([]);
   const [positions, setPositions] = useState([]);
-  const [areas, setAreas] = useState([]);
   const [formData, setFormData] = useState({
     position: "",
-    facility: "",
-    area_of_allocation: ""
+    facility: ""
   });
 
   useEffect(() => {
@@ -42,21 +40,18 @@ const CompleteRegistration = () => {
         }
       }
 
-      // Fetch facilities, positions, and areas
+      // Fetch facilities and positions
       try {
-        const [facilitiesRes, positionsRes, areasRes] = await Promise.all([
+        const [facilitiesRes, positionsRes] = await Promise.all([
           fetch(`${API}/facilities`),
-          fetch(`${API}/positions`),
-          fetch(`${API}/areas`)
+          fetch(`${API}/positions`)
         ]);
         
         const facilitiesData = await facilitiesRes.json();
         const positionsData = await positionsRes.json();
-        const areasData = await areasRes.json();
         
         setFacilities(facilitiesData.facilities || []);
         setPositions(positionsData.positions || []);
-        setAreas(areasData.areas || []);
       } catch (error) {
         console.error("Error fetching data:", error);
       }
@@ -159,31 +154,10 @@ const CompleteRegistration = () => {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="area_of_allocation" className="text-slate-700">Area of Allocation</Label>
-              <Select 
-                value={formData.area_of_allocation} 
-                onValueChange={(value) => handleSelectChange("area_of_allocation", value)}
-                required
-              >
-                <SelectTrigger className="h-12 border-slate-200" data-testid="area-select">
-                  <MapPin className="w-5 h-5 text-slate-400 mr-2" />
-                  <SelectValue placeholder="Select area of allocation" />
-                </SelectTrigger>
-                <SelectContent>
-                  {areas.map((area) => (
-                    <SelectItem key={area} value={area}>
-                      {area}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <Button 
               type="submit" 
               className="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white rounded-xl"
-              disabled={loading || !formData.position || !formData.facility || !formData.area_of_allocation}
+              disabled={loading || !formData.position || !formData.facility}
               data-testid="complete-registration-btn"
             >
               {loading ? (

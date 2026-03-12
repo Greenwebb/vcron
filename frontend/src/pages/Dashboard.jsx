@@ -204,6 +204,11 @@ const Dashboard = () => {
 
   // Handle attendance action
   const handleAttendance = async (action) => {
+    if (action === "login" && !selectedArea) {
+      toast.error("Please select your current location first");
+      return;
+    }
+
     setActionLoading(true);
 
     try {
@@ -220,6 +225,7 @@ const Dashboard = () => {
         action,
         latitude: coords?.latitude || null,
         longitude: coords?.longitude || null,
+        area_of_allocation: selectedArea,
         offline_id: `offline_${Date.now()}`
       };
 
@@ -433,10 +439,6 @@ const Dashboard = () => {
                     <Building2 className="w-4 h-4 text-slate-400" />
                     <span data-testid="user-facility">{user?.facility}</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-4 h-4 text-slate-400" />
-                    <span data-testid="user-area">{user?.area_of_allocation}</span>
-                  </div>
                 </div>
               </div>
               <Badge 
@@ -463,13 +465,33 @@ const Dashboard = () => {
           )}
         </div>
 
+        {/* Your Current Location Selection */}
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="p-4">
+            <Label className="text-slate-700 font-medium mb-2 block">Your Current Location</Label>
+            <Select value={selectedArea} onValueChange={setSelectedArea}>
+              <SelectTrigger className="h-12 border-slate-200" data-testid="current-location-select">
+                <MapPin className="w-5 h-5 text-teal-600 mr-2" />
+                <SelectValue placeholder="Select where you are reporting from" />
+              </SelectTrigger>
+              <SelectContent>
+                {areas.map((area) => (
+                  <SelectItem key={area} value={area}>
+                    {area}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+
         {/* Action Buttons */}
         <div className="grid grid-cols-1 gap-4">
           {/* Report for Duty Button */}
           <button
             onClick={() => handleAttendance("login")}
-            disabled={actionLoading || isOnDuty}
-            className={`action-button-login h-32 md:h-40 flex flex-col items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${isOnDuty ? 'opacity-50' : ''}`}
+            disabled={actionLoading || isOnDuty || !selectedArea}
+            className={`action-button-login h-32 md:h-40 flex flex-col items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${isOnDuty || !selectedArea ? 'opacity-50' : ''}`}
             data-testid="report-duty-btn"
           >
             {actionLoading ? (
@@ -478,7 +500,7 @@ const Dashboard = () => {
               <>
                 <LogIn className="w-10 h-10" />
                 <span className="text-xl font-bold font-['Manrope']">Report for Duty</span>
-                <span className="text-sm opacity-80">Clock in for your shift</span>
+                <span className="text-sm opacity-80">{selectedArea ? `Clock in at ${selectedArea}` : 'Select location first'}</span>
               </>
             )}
           </button>

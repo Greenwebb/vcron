@@ -137,7 +137,6 @@ class UserCreate(BaseModel):
     name: str
     position: str
     facility: str
-    area_of_allocation: str
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -178,6 +177,7 @@ class AttendanceCreate(BaseModel):
     action: str  # "login" or "logout"
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    area_of_allocation: Optional[str] = None  # Facility or Outreach
     offline_id: Optional[str] = None  # For offline sync
 
 class OfflineAttendanceSync(BaseModel):
@@ -273,13 +273,11 @@ async def register(user_data: UserCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Validate facility, position, and area
+    # Validate facility and position
     if user_data.facility not in FACILITIES:
         raise HTTPException(status_code=400, detail="Invalid facility")
     if user_data.position not in POSITIONS:
         raise HTTPException(status_code=400, detail="Invalid position")
-    if user_data.area_of_allocation not in AREAS_OF_ALLOCATION:
-        raise HTTPException(status_code=400, detail="Invalid area of allocation")
     
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     hashed_password = hash_password(user_data.password)
@@ -291,7 +289,6 @@ async def register(user_data: UserCreate):
         "password": hashed_password,
         "position": user_data.position,
         "facility": user_data.facility,
-        "area_of_allocation": user_data.area_of_allocation,
         "picture": None,
         "role": "user",
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -310,7 +307,6 @@ async def register(user_data: UserCreate):
             name=user_data.name,
             position=user_data.position,
             facility=user_data.facility,
-            area_of_allocation=user_data.area_of_allocation,
             role="user",
             created_at=user_doc["created_at"]
         )
@@ -465,21 +461,18 @@ async def complete_registration(request: Request, user: dict = Depends(get_curre
     body = await request.json()
     position = body.get("position")
     facility = body.get("facility")
-    area_of_allocation = body.get("area_of_allocation")
     
-    if not position or not facility or not area_of_allocation:
-        raise HTTPException(status_code=400, detail="Position, facility, and area of allocation are required")
+    if not position or not facility:
+        raise HTTPException(status_code=400, detail="Position and facility are required")
     
     if facility not in FACILITIES:
         raise HTTPException(status_code=400, detail="Invalid facility")
     if position not in POSITIONS:
         raise HTTPException(status_code=400, detail="Invalid position")
-    if area_of_allocation not in AREAS_OF_ALLOCATION:
-        raise HTTPException(status_code=400, detail="Invalid area of allocation")
     
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {"position": position, "facility": facility, "area_of_allocation": area_of_allocation}}
+        {"$set": {"position": position, "facility": facility}}
     )
     
     updated_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -531,13 +524,16 @@ async def create_attendance(attendance: AttendanceCreate, user: dict = Depends(g
     
     attendance_id = f"att_{uuid.uuid4().hex[:12]}"
     
+    # Use area from request, fallback to user's stored area
+    area = attendance.area_of_allocation or user.get("area_of_allocation")
+    
     record = {
         "attendance_id": attendance_id,
         "user_id": user["user_id"],
         "user_name": user["name"],
         "position": user["position"],
         "facility": user["facility"],
-        "area_of_allocation": user.get("area_of_allocation"),
+        "area_of_allocation": area,
         "action": attendance.action,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "latitude": attendance.latitude,
@@ -568,12 +564,16 @@ async def sync_offline_attendance(sync_data: OfflineAttendanceSync, user: dict =
         
         attendance_id = f"att_{uuid.uuid4().hex[:12]}"
         
+        # Use area from request, fallback to user's stored area
+        area = record.area_of_allocation or user.get("area_of_allocation")
+        
         new_record = {
             "attendance_id": attendance_id,
             "user_id": user["user_id"],
             "user_name": user["name"],
             "position": user["position"],
             "facility": user["facility"],
+            "area_of_allocation": area,
             "action": record.action,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "latitude": record.latitude,

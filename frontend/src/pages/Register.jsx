@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Clock, Mail, Lock, User, Building2, Briefcase, ArrowLeft, MapPin } from "lucide-react";
+import { Clock, Mail, Lock, User, Building2, Briefcase, ArrowLeft } from "lucide-react";
 import { API } from "@/App";
 
 const Register = () => {
@@ -15,34 +15,29 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [facilities, setFacilities] = useState([]);
   const [positions, setPositions] = useState([]);
-  const [areas, setAreas] = useState([]);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
     position: "",
-    facility: "",
-    area_of_allocation: ""
+    facility: ""
   });
 
   useEffect(() => {
-    // Fetch facilities, positions, and areas
+    // Fetch facilities and positions
     const fetchData = async () => {
       try {
-        const [facilitiesRes, positionsRes, areasRes] = await Promise.all([
+        const [facilitiesRes, positionsRes] = await Promise.all([
           fetch(`${API}/facilities`),
-          fetch(`${API}/positions`),
-          fetch(`${API}/areas`)
+          fetch(`${API}/positions`)
         ]);
         
         const facilitiesData = await facilitiesRes.json();
         const positionsData = await positionsRes.json();
-        const areasData = await areasRes.json();
         
         setFacilities(facilitiesData.facilities || []);
         setPositions(positionsData.positions || []);
-        setAreas(areasData.areas || []);
       } catch (error) {
         console.error("Error fetching data:", error);
       }
@@ -89,8 +84,7 @@ const Register = () => {
           email: formData.email,
           password: formData.password,
           position: formData.position,
-          facility: formData.facility,
-          area_of_allocation: formData.area_of_allocation
+          facility: formData.facility
         }),
         credentials: "include"
       });
@@ -251,27 +245,6 @@ const Register = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="area_of_allocation" className="text-slate-700">Area of Allocation</Label>
-                <Select 
-                  value={formData.area_of_allocation} 
-                  onValueChange={(value) => handleSelectChange("area_of_allocation", value)}
-                  required
-                >
-                  <SelectTrigger className="h-12 border-slate-200" data-testid="area-select">
-                    <MapPin className="w-5 h-5 text-slate-400 mr-2" />
-                    <SelectValue placeholder="Select area of allocation" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {areas.map((area) => (
-                      <SelectItem key={area} value={area}>
-                        {area}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="password" className="text-slate-700">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -310,7 +283,7 @@ const Register = () => {
               <Button 
                 type="submit" 
                 className="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white rounded-xl"
-                disabled={loading || !formData.position || !formData.facility || !formData.area_of_allocation}
+                disabled={loading || !formData.position || !formData.facility}
                 data-testid="register-submit-btn"
               >
                 {loading ? (
