@@ -1,34 +1,240 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
+/* V-Chron App Styles */
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
+.App {
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
+}
+
+/* Gradient backgrounds */
+.bg-vchron-gradient {
+    background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+}
+
+.bg-vchron-light-gradient {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+/* Card styles */
+.vchron-card {
+    background: white;
+    border-radius: 1rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.08);
+    overflow: hidden;
+}
+
+.vchron-card:hover {
+    box-shadow: 0 4px 16px rgba(15, 118, 110, 0.12);
+    transition: box-shadow 0.2s ease-in-out;
+}
+
+/* Action buttons */
+.action-button-login {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
+    border-radius: 1rem;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+    transition: all 0.2s ease-in-out;
 }
 
-.App-link {
-    color: #61dafb;
+.action-button-login:hover {
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    transform: translateY(-2px);
 }
 
-@keyframes App-logo-spin {
+.action-button-login:active {
+    transform: scale(0.98);
+}
+
+.action-button-logout {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+    border-radius: 1rem;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+    transition: all 0.2s ease-in-out;
+}
+
+.action-button-logout:hover {
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+    transform: translateY(-2px);
+}
+
+.action-button-logout:active {
+    transform: scale(0.98);
+}
+
+/* Status badges */
+.status-on-duty {
+    background: #dcfce7;
+    color: #14532d;
+    border: 1px solid #bbf7d0;
+}
+
+.status-off-duty {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+/* Offline indicator */
+.offline-banner {
+    background: #fef3c7;
+    color: #92400e;
+    border-bottom: 1px solid #fcd34d;
+}
+
+/* Map container */
+.map-container {
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+}
+
+/* Table styles */
+.attendance-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+.attendance-table td {
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.attendance-table tr:hover td {
+    background: #f8fafc;
+}
+
+/* Animation classes */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
     from {
-        transform: rotate(0deg);
+        opacity: 0;
+        transform: translateY(10px);
     }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-up {
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Stat card */
+.stat-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 1rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.08);
+}
+
+.stat-card-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0f766e;
+    font-family: 'Manrope', sans-serif;
+}
+
+.stat-card-label {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+/* Navigation */
+.nav-link {
+    color: #64748b;
+    transition: color 0.2s ease-in-out;
+}
+
+.nav-link:hover {
+    color: #0f766e;
+}
+
+.nav-link.active {
+    color: #0f766e;
+    font-weight: 600;
+}
+
+/* Form styles */
+.form-input {
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+    padding: 0.75rem 1rem;
+    transition: all 0.2s ease-in-out;
+}
+
+.form-input:focus {
+    border-color: #0f766e;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+    outline: none;
+}
+
+/* Loading spinner */
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #e2e8f0;
+    border-top-color: #0f766e;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
     to {
         transform: rotate(360deg);
     }
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .action-button-login,
+    .action-button-logout {
+        min-height: 120px;
+        font-size: 1.25rem;
+    }
+}
+
+/* Leaflet marker cluster */
+.marker-cluster-small {
+    background-color: rgba(15, 118, 110, 0.6);
+}
+
+.marker-cluster-small div {
+    background-color: rgba(15, 118, 110, 0.9);
+}
+
+.marker-cluster-medium {
+    background-color: rgba(20, 184, 166, 0.6);
+}
+
+.marker-cluster-medium div {
+    background-color: rgba(20, 184, 166, 0.9);
+}
+
+.marker-cluster-large {
+    background-color: rgba(17, 94, 89, 0.6);
+}
+
+.marker-cluster-large div {
+    background-color: rgba(17, 94, 89, 0.9);
 }
