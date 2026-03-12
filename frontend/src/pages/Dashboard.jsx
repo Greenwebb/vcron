@@ -30,8 +30,8 @@ const offlineStore = localforage.createInstance({
 const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [user, setUser] = useState(location.state?.user || null);
-  const [loading, setLoading] = useState(!location.state?.user);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [status, setStatus] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -57,13 +57,8 @@ const Dashboard = () => {
     };
   }, []);
 
-  // Fetch user data if not passed via state
+  // Always fetch fresh user data from API
   useEffect(() => {
-    if (user) {
-      setLoading(false);
-      return;
-    }
-
     const fetchUser = async () => {
       try {
         const response = await fetch(`${API}/auth/me`, {
@@ -72,6 +67,11 @@ const Dashboard = () => {
         
         if (response.ok) {
           const userData = await response.json();
+          // Check if user needs to complete registration
+          if (!userData.position || !userData.facility) {
+            navigate("/complete-registration", { state: { user: userData } });
+            return;
+          }
           setUser(userData);
         } else {
           navigate("/login");
@@ -85,7 +85,7 @@ const Dashboard = () => {
     };
 
     fetchUser();
-  }, [user, navigate]);
+  }, [navigate]);
 
   // Fetch attendance status
   const fetchStatus = useCallback(async () => {

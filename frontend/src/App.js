@@ -137,27 +137,13 @@ const AuthCallback = () => {
   );
 };
 
-// Protected Route Component
+// Protected Route Component - simplified, pages handle their own auth
 const ProtectedRoute = ({ children, requireAdmin = false }) => {
-  const { user, loading } = useAuth();
+  const [isAuthenticated, setIsAuthenticated] = useState(null);
+  const [userData, setUserData] = useState(null);
   const location = useLocation();
-  const navigate = useNavigate();
-  const [localUser, setLocalUser] = useState(location.state?.user || null);
-  const [checking, setChecking] = useState(!localUser);
 
   useEffect(() => {
-    // Always update localUser when location.state.user changes
-    if (location.state?.user) {
-      setLocalUser(location.state.user);
-      setChecking(false);
-      return;
-    }
-
-    if (localUser && localUser.position && localUser.facility) {
-      setChecking(false);
-      return;
-    }
-
     const checkAuth = async () => {
       try {
         const response = await fetch(`${API}/auth/me`, {
@@ -165,22 +151,21 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
         });
         
         if (response.ok) {
-          const userData = await response.json();
-          setLocalUser(userData);
+          const user = await response.json();
+          setUserData(user);
+          setIsAuthenticated(true);
         } else {
-          navigate('/login');
+          setIsAuthenticated(false);
         }
       } catch (error) {
-        navigate('/login');
-      } finally {
-        setChecking(false);
+        setIsAuthenticated(false);
       }
     };
 
     checkAuth();
-  }, [location.state?.user, navigate]);
+  }, [location.pathname]);
 
-  if (checking || loading) {
+  if (isAuthenticated === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="w-12 h-12 border-4 border-teal-700 border-t-transparent rounded-full animate-spin"></div>
@@ -188,21 +173,12 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
     );
   }
 
-  const currentUser = localUser || user;
-
-  if (!currentUser) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
 
-  if (requireAdmin && currentUser.role !== 'admin') {
+  if (requireAdmin && userData?.role !== 'admin') {
     return <Navigate to="/dashboard" />;
-  }
-
-  // Check if user needs to complete registration
-  if (!currentUser.position || !currentUser.facility) {
-    if (location.pathname !== '/complete-registration') {
-      return <Navigate to="/complete-registration" state={{ user: currentUser }} />;
-    }
   }
 
   return children;

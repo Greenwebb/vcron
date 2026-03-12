@@ -22,13 +22,25 @@ const CompleteRegistration = () => {
   });
 
   useEffect(() => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
+    // Check if user is already authenticated via cookie
+    const checkAndFetch = async () => {
+      if (!user) {
+        // Try to get user from API
+        try {
+          const response = await fetch(`${API}/auth/me`, {
+            credentials: "include"
+          });
+          if (!response.ok) {
+            navigate("/login");
+            return;
+          }
+        } catch (error) {
+          navigate("/login");
+          return;
+        }
+      }
 
-    // Fetch facilities and positions
-    const fetchData = async () => {
+      // Fetch facilities and positions
       try {
         const [facilitiesRes, positionsRes] = await Promise.all([
           fetch(`${API}/facilities`),
@@ -45,7 +57,7 @@ const CompleteRegistration = () => {
       }
     };
     
-    fetchData();
+    checkAndFetch();
   }, [user, navigate]);
 
   const handleSelectChange = (name, value) => {
@@ -71,13 +83,14 @@ const CompleteRegistration = () => {
 
       if (response.ok) {
         toast.success("Profile completed!");
-        navigate("/dashboard", { state: { user: data }, replace: true });
+        // Use window.location for a full page redirect to ensure fresh state
+        window.location.href = "/dashboard";
       } else {
         toast.error(data.detail || "Failed to complete registration");
+        setLoading(false);
       }
     } catch (error) {
       toast.error("Connection error. Please try again.");
-    } finally {
       setLoading(false);
     }
   };
@@ -93,7 +106,7 @@ const CompleteRegistration = () => {
             Complete Your Profile
           </CardTitle>
           <CardDescription className="text-slate-500">
-            Hi {user?.name}, please select your position and facility to continue
+            Hi {user?.name || "there"}, please select your position and facility to continue
           </CardDescription>
         </CardHeader>
 
