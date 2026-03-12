@@ -71,7 +71,7 @@ const CompleteRegistration = () => {
 
       if (response.ok) {
         toast.success("Profile completed!");
-        navigate("/dashboard", { state: { user: data } });
+        navigate("/dashboard", { state: { user: data }, replace: true });
       } else {
         toast.error(data.detail || "Failed to complete registration");
       }

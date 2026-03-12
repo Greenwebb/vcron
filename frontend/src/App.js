@@ -146,7 +146,14 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
   const [checking, setChecking] = useState(!localUser);
 
   useEffect(() => {
-    if (localUser) {
+    // Always update localUser when location.state.user changes
+    if (location.state?.user) {
+      setLocalUser(location.state.user);
+      setChecking(false);
+      return;
+    }
+
+    if (localUser && localUser.position && localUser.facility) {
       setChecking(false);
       return;
     }
@@ -171,7 +178,7 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
     };
 
     checkAuth();
-  }, [localUser, navigate]);
+  }, [location.state?.user, navigate]);
 
   if (checking || loading) {
     return (
