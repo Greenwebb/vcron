@@ -225,7 +225,7 @@ async def get_current_user(request: Request) -> dict:
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return user
-    except:
+    except Exception:
         pass
     
     # Check if it's a session token (for Google OAuth)
@@ -655,7 +655,7 @@ async def admin_get_attendance(
             start = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
             end = start + timedelta(days=1)
             query["timestamp"] = {"$gte": start.isoformat(), "$lt": end.isoformat()}
-        except:
+        except Exception:
             pass
     
     if user_name:
@@ -717,7 +717,7 @@ async def admin_export_attendance(
             start = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
             end = start + timedelta(days=1)
             query["timestamp"] = {"$gte": start.isoformat(), "$lt": end.isoformat()}
-        except:
+        except Exception:
             pass
     
     records = await db.attendance.find(query, {"_id": 0}).sort("timestamp", -1).to_list(10000)
@@ -795,7 +795,7 @@ async def send_backup_email(
             start = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
             end = start + timedelta(days=1)
             query["timestamp"] = {"$gte": start.isoformat(), "$lt": end.isoformat()}
-        except:
+        except Exception:
             pass
     
     records = await db.attendance.find(query, {"_id": 0}).sort("timestamp", -1).to_list(10000)
