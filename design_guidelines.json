@@ -1,0 +1,169 @@
+{
+  "identity": {
+    "name": "V-Chron",
+    "subtitle": "The Truth of Time",
+    "archetype": "The Clinical Precision",
+    "tone": "Trustworthy, Efficient, Professional, Calm",
+    "target_audience": "Healthcare Workers (Nurses, Doctors, Technicians)"
+  },
+  "typography": {
+    "fonts": {
+      "headings": {
+        "family": "Manrope",
+        "weights": ["500", "600", "700"],
+        "usage": "Page titles, Card headers, Modal titles"
+      },
+      "body": {
+        "family": "Inter",
+        "weights": ["400", "500"],
+        "usage": "Data tables, Input labels, Long text"
+      },
+      "mono": {
+        "family": "JetBrains Mono",
+        "weights": ["400"],
+        "usage": "Timestamps, GPS coordinates, ID numbers"
+      }
+    },
+    "scale": {
+      "h1": "text-3xl md:text-4xl font-bold tracking-tight",
+      "h2": "text-2xl font-semibold tracking-tight",
+      "h3": "text-xl font-medium",
+      "body_lg": "text-lg leading-relaxed",
+      "body_base": "text-base leading-normal",
+      "caption": "text-sm text-muted-foreground"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "DEFAULT": "#0f766e",
+        "foreground": "#ffffff",
+        "light": "#14b8a6",
+        "dark": "#115e59"
+      },
+      "secondary": {
+        "DEFAULT": "#dcfce7",
+        "foreground": "#14532d"
+      },
+      "accent": {
+        "DEFAULT": "#0ea5e9",
+        "foreground": "#ffffff"
+      },
+      "background": {
+        "DEFAULT": "#f8fafc",
+        "paper": "#ffffff",
+        "subtle": "#f1f5f9"
+      },
+      "status": {
+        "success": "#10b981",
+        "warning": "#f59e0b",
+        "error": "#ef4444",
+        "info": "#3b82f6"
+      }
+    },
+    "gradients": {
+      "primary": "bg-gradient-to-br from-teal-700 to-teal-900",
+      "subtle": "bg-gradient-to-b from-slate-50 to-slate-100"
+    }
+  },
+  "layout": {
+    "grid": {
+      "mobile": "grid-cols-1 gap-4 p-4",
+      "tablet": "grid-cols-2 gap-6 p-6",
+      "desktop": "grid-cols-12 gap-8 p-8 max-w-7xl mx-auto"
+    },
+    "spacing": {
+      "section": "py-12 md:py-20",
+      "card_padding": "p-6",
+      "stack": "space-y-4"
+    },
+    "containers": {
+      "card": "bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden",
+      "card_hover": "hover:shadow-md transition-shadow duration-200",
+      "glass": "bg-white/80 backdrop-blur-md border border-white/20"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 rounded-full shadow-sm font-medium transition-transform active:scale-95",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 h-11 px-8 rounded-full font-medium",
+      "outline": "border-2 border-primary text-primary hover:bg-primary/5 h-11 px-8 rounded-full font-medium",
+      "ghost": "hover:bg-slate-100 text-slate-700 h-10 px-4 rounded-md",
+      "action_large": "h-32 w-full flex flex-col items-center justify-center gap-2 text-xl font-bold rounded-2xl shadow-lg transition-all active:scale-95"
+    },
+    "cards": {
+      "stat": "bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2",
+      "attendance": "bg-white p-4 rounded-lg border-l-4 border-l-primary shadow-sm flex justify-between items-center"
+    },
+    "inputs": {
+      "default": "h-11 rounded-lg border-slate-200 bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    }
+  },
+  "motion": {
+    "transitions": {
+      "default": "transition-all duration-200 ease-in-out",
+      "smooth": "transition-all duration-500 ease-[0.32,0.72,0,1]"
+    },
+    "animations": {
+      "fade_in": "animate-in fade-in duration-500",
+      "slide_up": "animate-in slide-in-from-bottom-4 duration-500",
+      "pulse": "animate-pulse"
+    }
+  },
+  "visual_enhancers": {
+    "shadows": {
+      "soft": "shadow-[0_2px_8px_rgba(15,118,110,0.08)]",
+      "float": "shadow-[0_8px_30px_rgba(0,0,0,0.12)]"
+    },
+    "borders": {
+      "subtle": "border border-slate-200",
+      "active": "border-2 border-primary"
+    },
+    "radius": {
+      "default": "rounded-lg",
+      "large": "rounded-2xl",
+      "pill": "rounded-full"
+    }
+  },
+  "image_urls": {
+    "hero": [
+      {
+        "url": "https://images.unsplash.com/photo-1653508311277-1ecf6ee52c5e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwzfHxkb2N0b3JzJTIwbnVyc2VzJTIwaG9zcGl0YWwlMjBzdGFmZiUyMG1lZGljYWwlMjB0ZWFtJTIwdW5pZm9ybXxlbnwwfHx8fDE3NzMyOTgxMjZ8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Medical professionals group",
+        "usage": "Landing page hero background"
+      }
+    ],
+    "buildings": [
+      {
+        "url": "https://images.unsplash.com/photo-1525199588264-c9ceb2e22457?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwbWVkaWNhbCUyMGNsaW5pYyUyMGJ1aWxkaW5nJTIwZXh0ZXJpb3IlMjBtb2Rlcm58ZW58MHx8fHwxNzczMjk4MTIwfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Modern clinic exterior",
+        "usage": "Facility selection background or placeholder"
+      }
+    ]
+  },
+  "accessibility": {
+    "rules": [
+      "Ensure 4.5:1 contrast ratio for normal text",
+      "Use data-testid for all interactive elements",
+      "Support prefers-reduced-motion",
+      "Touch targets must be at least 44x44px",
+      "Focus states must be clearly visible (ring-2 ring-primary)"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Use 'Manrope' for all headings and 'Inter' for body text.",
+    "Implement a 'Medical Chart' aesthetic for cards: clean white backgrounds with subtle borders and soft shadows.",
+    "The 'Report for Duty' button should be massive and prominent on mobile, potentially taking up a significant portion of the screen or being a floating action button.",
+    "Use the color palette strictly: Primary Teal for main actions, Slate for neutrals, Red/Green for status.",
+    "Ensure the map view uses a clean, desaturated style if possible to maintain the professional look.",
+    "For the offline indicator, use a subtle but clear status bar at the top of the app.",
+    "Do NOT use gradients for text. Keep text solid and high-contrast."
+  ],
+  "universal_guidelines": [
+    "Don't make generic centered layouts.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for overlays.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Use 2-3x more spacing than feels comfortable."
+  ]
+}
