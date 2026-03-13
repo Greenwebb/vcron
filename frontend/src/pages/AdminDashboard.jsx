@@ -498,6 +498,7 @@ const AdminDashboard = () => {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
+                      <TableHead>Phone</TableHead>
                       <TableHead>Position</TableHead>
                       <TableHead>Facility</TableHead>
                       <TableHead>Role</TableHead>
@@ -509,6 +510,7 @@ const AdminDashboard = () => {
                       <TableRow key={user.user_id}>
                         <TableCell className="font-medium">{user.name}</TableCell>
                         <TableCell className="text-slate-500">{user.email}</TableCell>
+                        <TableCell className="text-slate-500">{user.phone_number || "-"}</TableCell>
                         <TableCell>{user.position || "-"}</TableCell>
                         <TableCell>{user.facility || "-"}</TableCell>
                         <TableCell>
