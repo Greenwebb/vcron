@@ -627,9 +627,10 @@ const AdminDashboard = () => {
                       <TableHead>Staff Name</TableHead>
                       <TableHead>Position</TableHead>
                       <TableHead>Facility</TableHead>
+                      <TableHead>Location Type</TableHead>
                       <TableHead>Action</TableHead>
                       <TableHead>Time</TableHead>
-                      <TableHead>Location</TableHead>
+                      <TableHead>GPS Coordinates</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -639,6 +640,11 @@ const AdminDashboard = () => {
                           <TableCell className="font-medium">{record.user_name}</TableCell>
                           <TableCell>{record.position}</TableCell>
                           <TableCell>{record.facility}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-slate-50">
+                              {record.area_of_allocation || "-"}
+                            </Badge>
+                          </TableCell>
                           <TableCell>
                             <Badge 
                               variant={record.action === "login" ? "default" : "destructive"}
@@ -663,7 +669,7 @@ const AdminDashboard = () => {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-12 text-slate-500">
+                        <TableCell colSpan={7} className="text-center py-12 text-slate-500">
                           No attendance records found
                         </TableCell>
                       </TableRow>

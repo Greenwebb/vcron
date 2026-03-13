@@ -865,13 +865,14 @@ async def admin_export_attendance(
         
         output = StringIO()
         writer = csv.writer(output)
-        writer.writerow(["Staff Name", "Position", "Facility", "Action", "Timestamp", "Latitude", "Longitude"])
+        writer.writerow(["Staff Name", "Position", "Facility", "Location Type", "Action", "Timestamp", "Latitude", "Longitude"])
         
         for r in records:
             writer.writerow([
                 r.get("user_name", ""),
                 r.get("position", ""),
                 r.get("facility", ""),
+                r.get("area_of_allocation", ""),
                 r.get("action", ""),
                 r.get("timestamp", ""),
                 r.get("latitude", ""),
@@ -889,7 +890,7 @@ async def admin_export_attendance(
         ws = wb.active
         ws.title = "Attendance"
         
-        headers = ["Staff Name", "Position", "Facility", "Action", "Timestamp", "Latitude", "Longitude"]
+        headers = ["Staff Name", "Position", "Facility", "Location Type", "Action", "Timestamp", "Latitude", "Longitude"]
         ws.append(headers)
         
         for r in records:
@@ -897,6 +898,7 @@ async def admin_export_attendance(
                 r.get("user_name", ""),
                 r.get("position", ""),
                 r.get("facility", ""),
+                r.get("area_of_allocation", ""),
                 r.get("action", ""),
                 r.get("timestamp", ""),
                 r.get("latitude", ""),
@@ -944,6 +946,7 @@ async def send_backup_email(
             <td style="padding: 8px; border: 1px solid #ddd;">{r.get("user_name", "")}</td>
             <td style="padding: 8px; border: 1px solid #ddd;">{r.get("position", "")}</td>
             <td style="padding: 8px; border: 1px solid #ddd;">{r.get("facility", "")}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{r.get("area_of_allocation", "N/A")}</td>
             <td style="padding: 8px; border: 1px solid #ddd;">{r.get("action", "").upper()}</td>
             <td style="padding: 8px; border: 1px solid #ddd;">{r.get("timestamp", "")}</td>
             <td style="padding: 8px; border: 1px solid #ddd;">{r.get("latitude", "N/A")}, {r.get("longitude", "N/A")}</td>
@@ -962,6 +965,7 @@ async def send_backup_email(
                     <th style="padding: 8px; border: 1px solid #ddd;">Staff Name</th>
                     <th style="padding: 8px; border: 1px solid #ddd;">Position</th>
                     <th style="padding: 8px; border: 1px solid #ddd;">Facility</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Location Type</th>
                     <th style="padding: 8px; border: 1px solid #ddd;">Action</th>
                     <th style="padding: 8px; border: 1px solid #ddd;">Timestamp</th>
                     <th style="padding: 8px; border: 1px solid #ddd;">GPS Coordinates</th>

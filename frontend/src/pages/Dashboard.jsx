@@ -19,7 +19,8 @@ import {
   Building2,
   Briefcase,
   Menu,
-  X
+  X,
+  Phone
 } from "lucide-react";
 import { API } from "@/App";
 import localforage from "localforage";
@@ -431,6 +432,10 @@ const Dashboard = () => {
                   {user?.name}
                 </h2>
                 <div className="flex flex-wrap gap-3 mt-2 text-sm text-slate-600">
+                  <div className="flex items-center gap-1">
+                    <Phone className="w-4 h-4 text-slate-400" />
+                    <span data-testid="user-phone">{user?.phone_number}</span>
+                  </div>
                   <div className="flex items-center gap-1">
                     <Briefcase className="w-4 h-4 text-slate-400" />
                     <span data-testid="user-position">{user?.position}</span>
