@@ -156,6 +156,14 @@ AREAS_OF_ALLOCATION = [
     "Outreach"
 ]
 
+# ===================== DEFAULT SHIFT TIMES =====================
+DEFAULT_SHIFTS = {
+    "morning": {"start": "06:00", "end": "14:00"},
+    "afternoon": {"start": "14:00", "end": "22:00"},
+    "night": {"start": "22:00", "end": "06:00"},
+    "four_off": {"start": "07:00", "end": "19:00"}
+}
+
 # ===================== PYDANTIC MODELS =====================
 
 class UserBase(BaseModel):
@@ -168,7 +176,8 @@ class UserBase(BaseModel):
     facility: Optional[str] = None
     area_of_allocation: Optional[str] = None
     picture: Optional[str] = None
-    role: str = "user"
+    role: str = "user"  # user, admin, superuser
+    assigned_scope: Optional[dict] = None  # For admins: {"type": "facility/district/province", "value": "name"}
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -196,6 +205,7 @@ class UserResponse(BaseModel):
     area_of_allocation: Optional[str] = None
     picture: Optional[str] = None
     role: str = "user"
+    assigned_scope: Optional[dict] = None
     created_at: Optional[str] = None
 
 class UserUpdate(BaseModel):
@@ -207,6 +217,31 @@ class UserUpdate(BaseModel):
     facility: Optional[str] = None
     area_of_allocation: Optional[str] = None
     role: Optional[str] = None
+    assigned_scope: Optional[dict] = None
+
+class FacilityCreate(BaseModel):
+    name: str
+    district: str
+    province: str
+
+class FacilityUpdate(BaseModel):
+    name: Optional[str] = None
+    district: Optional[str] = None
+    province: Optional[str] = None
+
+class ShiftConfig(BaseModel):
+    morning_start: str = "06:00"
+    morning_end: str = "14:00"
+    afternoon_start: str = "14:00"
+    afternoon_end: str = "22:00"
+    night_start: str = "22:00"
+    night_end: str = "06:00"
+    four_off_start: str = "07:00"
+    four_off_end: str = "19:00"
+    grace_period_minutes: int = 15
+
+class PasswordReset(BaseModel):
+    new_password: str
 
 class AttendanceRecord(BaseModel):
     attendance_id: str
@@ -308,8 +343,14 @@ async def get_current_user(request: Request) -> dict:
 
 async def get_admin_user(request: Request) -> dict:
     user = await get_current_user(request)
-    if user.get("role") != "admin":
+    if user.get("role") not in ["admin", "superuser"]:
         raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+async def get_superuser(request: Request) -> dict:
+    user = await get_current_user(request)
+    if user.get("role") != "superuser":
+        raise HTTPException(status_code=403, detail="Super user access required")
     return user
 
 # ===================== AUTH ROUTES =====================
