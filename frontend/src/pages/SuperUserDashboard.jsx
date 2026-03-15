@@ -548,22 +548,69 @@ const ShiftsTab = () => {
 const ReportsTab = () => {
   const [report, setReport] = useState(null);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [facilityFilter, setFacilityFilter] = useState("");
+  const [provinceFilter, setProvinceFilter] = useState("");
   const [districtFilter, setDistrictFilter] = useState("");
+  const [facilityFilter, setFacilityFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Location data for dropdowns
+  const [provinces, setProvinces] = useState([]);
+  const [districtsList, setDistrictsList] = useState([]);
+  const [facilitiesList, setFacilitiesList] = useState([]);
+
+  // Fetch provinces on mount
+  useEffect(() => {
+    const fetchProvinces = async () => {
+      try {
+        const res = await fetch(`${API}/provinces`);
+        if (res.ok) { const d = await res.json(); setProvinces(d.provinces || []); }
+      } catch (e) { console.error(e); }
+    };
+    fetchProvinces();
+  }, []);
+
+  // Fetch districts when province changes
+  useEffect(() => {
+    if (!provinceFilter) { setDistrictsList([]); setDistrictFilter(""); setFacilitiesList([]); setFacilityFilter(""); return; }
+    const fetchDistricts = async () => {
+      try {
+        const res = await fetch(`${API}/districts/${encodeURIComponent(provinceFilter)}`);
+        if (res.ok) { const d = await res.json(); setDistrictsList(d.districts || []); }
+      } catch (e) { console.error(e); }
+    };
+    fetchDistricts();
+    setDistrictFilter("");
+    setFacilityFilter("");
+    setFacilitiesList([]);
+  }, [provinceFilter]);
+
+  // Fetch facilities when district changes
+  useEffect(() => {
+    if (!districtFilter) { setFacilitiesList([]); setFacilityFilter(""); return; }
+    const fetchFacilities = async () => {
+      try {
+        const res = await fetch(`${API}/facilities/${encodeURIComponent(districtFilter)}`);
+        if (res.ok) { const d = await res.json(); setFacilitiesList(d.facilities || []); }
+      } catch (e) { console.error(e); }
+    };
+    fetchFacilities();
+    setFacilityFilter("");
+  }, [districtFilter]);
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (date) params.append("date", new Date(date).toISOString());
-      if (facilityFilter) params.append("facility", facilityFilter);
+      if (provinceFilter) params.append("province", provinceFilter);
       if (districtFilter) params.append("district", districtFilter);
+      if (facilityFilter) params.append("facility", facilityFilter);
       const res = await fetch(`${API}/superuser/attendance-report?${params}`, { credentials: "include" });
       if (res.ok) setReport(await res.json());
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [date, facilityFilter, districtFilter]);
+  }, [date, provinceFilter, districtFilter, facilityFilter]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -571,8 +618,9 @@ const ReportsTab = () => {
     try {
       const params = new URLSearchParams();
       if (date) params.append("date", new Date(date).toISOString());
-      if (facilityFilter) params.append("facility", facilityFilter);
+      if (provinceFilter) params.append("province", provinceFilter);
       if (districtFilter) params.append("district", districtFilter);
+      if (facilityFilter) params.append("facility", facilityFilter);
       params.append("format", format);
       const res = await fetch(`${API}/superuser/export?${params}`, { credentials: "include" });
       if (res.ok) {
@@ -586,22 +634,110 @@ const ReportsTab = () => {
     } catch { toast.error("Export failed"); }
   };
 
+  const handleClearFilters = () => {
+    setProvinceFilter("");
+    setDistrictFilter("");
+    setFacilityFilter("");
+    setSearchQuery("");
+    setDate(new Date().toISOString().split("T")[0]);
+  };
+
+  // Client-side search filter on loaded records
+  const filteredRecords = (report?.records || []).filter((r) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      r.user_name?.toLowerCase().includes(q) ||
+      r.facility?.toLowerCase().includes(q) ||
+      r.position?.toLowerCase().includes(q) ||
+      r.area_of_allocation?.toLowerCase().includes(q)
+    );
+  });
+
+  // Recalc summary from filtered records
+  const filteredSummary = {
+    total: filteredRecords.filter(r => r.action === "login").length,
+    late: filteredRecords.filter(r => r.status === "late").length,
+    early: filteredRecords.filter(r => r.status === "early").length,
+    on_time: filteredRecords.filter(r => r.status === "on_time").length,
+  };
+
+  const activeFilterCount = [provinceFilter, districtFilter, facilityFilter].filter(Boolean).length;
+
   return (
     <div className="space-y-4" data-testid="su-reports">
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-end">
-        <div>
-          <Label className="text-slate-400 text-sm mb-1 block">Date</Label>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="bg-slate-900 border-slate-700 text-white w-44" data-testid="su-report-date" />
+      {/* Location Filters Row */}
+      <Card className="bg-slate-900 border-slate-800">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="w-4 h-4 text-amber-400" />
+            <span className="text-sm font-medium text-slate-300">Filter by Location</span>
+            {activeFilterCount > 0 && (
+              <Badge className="bg-amber-500/20 text-amber-400 border-0 text-xs">{activeFilterCount} active</Badge>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Province */}
+            <div>
+              <Label className="text-slate-500 text-xs mb-1 block">Province</Label>
+              <Select value={provinceFilter || "_none"} onValueChange={(v) => setProvinceFilter(v === "_none" ? "" : v)}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-white" data-testid="su-report-province">
+                  <SelectValue placeholder="All Provinces" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">All Provinces</SelectItem>
+                  {provinces.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* District */}
+            <div>
+              <Label className="text-slate-500 text-xs mb-1 block">District</Label>
+              <Select value={districtFilter || "_none"} onValueChange={(v) => setDistrictFilter(v === "_none" ? "" : v)} disabled={!provinceFilter}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-white" data-testid="su-report-district">
+                  <SelectValue placeholder={provinceFilter ? "All Districts" : "Select province first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">All Districts</SelectItem>
+                  {districtsList.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Facility */}
+            <div>
+              <Label className="text-slate-500 text-xs mb-1 block">Facility</Label>
+              <Select value={facilityFilter || "_none"} onValueChange={(v) => setFacilityFilter(v === "_none" ? "" : v)} disabled={!districtFilter}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-white" data-testid="su-report-facility">
+                  <SelectValue placeholder={districtFilter ? "All Facilities" : "Select district first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">All Facilities</SelectItem>
+                  {facilitiesList.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Date */}
+            <div>
+              <Label className="text-slate-500 text-xs mb-1 block">Date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="bg-slate-800 border-slate-700 text-white" data-testid="su-report-date" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Search + Actions Row */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Input placeholder="Search by staff name, facility, position..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 bg-slate-900 border-slate-700 text-white" data-testid="su-report-search" />
         </div>
-        <div>
-          <Label className="text-slate-400 text-sm mb-1 block">Facility</Label>
-          <Input placeholder="Filter by facility" value={facilityFilter} onChange={(e) => setFacilityFilter(e.target.value)} className="bg-slate-900 border-slate-700 text-white w-48" data-testid="su-report-facility" />
-        </div>
+        <Button variant="outline" onClick={handleClearFilters} className="border-slate-700 text-slate-300 hover:bg-slate-800" data-testid="su-report-clear">
+          <XCircle className="w-4 h-4 mr-2" />Clear
+        </Button>
         <Button variant="outline" onClick={fetchReport} className="border-slate-700 text-slate-300 hover:bg-slate-800" data-testid="su-report-refresh">
           <RefreshCw className="w-4 h-4 mr-2" />Refresh
         </Button>
-        <div className="ml-auto flex gap-2">
+        <div className="flex gap-2">
           <Button variant="outline" onClick={() => handleExport("csv")} className="border-slate-700 text-slate-300 hover:bg-slate-800" data-testid="su-export-csv">
             <Download className="w-4 h-4 mr-2" />CSV
           </Button>
@@ -612,37 +748,40 @@ const ReportsTab = () => {
       </div>
 
       {/* Summary Cards */}
-      {report?.summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card className="bg-slate-900 border-slate-800">
-            <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-white">{report.summary.total}</p>
-              <p className="text-xs text-slate-500">Total Logins</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-emerald-950 border-emerald-900">
-            <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-emerald-400">{report.summary.early}</p>
-              <p className="text-xs text-emerald-500">Early</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-blue-950 border-blue-900">
-            <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-blue-400">{report.summary.on_time}</p>
-              <p className="text-xs text-blue-500">On Time</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-red-950 border-red-900">
-            <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-red-400">{report.summary.late}</p>
-              <p className="text-xs text-red-500">Late</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-white">{filteredSummary.total}</p>
+            <p className="text-xs text-slate-500">Total Logins</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-emerald-950 border-emerald-900">
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-emerald-400">{filteredSummary.early}</p>
+            <p className="text-xs text-emerald-500">Early</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-blue-950 border-blue-900">
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-blue-400">{filteredSummary.on_time}</p>
+            <p className="text-xs text-blue-500">On Time</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-red-950 border-red-900">
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-red-400">{filteredSummary.late}</p>
+            <p className="text-xs text-red-500">Late</p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Records Table */}
       <Card className="bg-slate-900 border-slate-800">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-slate-400 font-normal">
+            Showing {filteredRecords.length} of {report?.records?.length || 0} records
+          </CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="max-h-[500px]">
             <Table>
@@ -658,8 +797,8 @@ const ReportsTab = () => {
               <TableBody>
                 {loading ? (
                   <TableRow><TableCell colSpan={5} className="text-center py-12 text-slate-500">Loading...</TableCell></TableRow>
-                ) : report?.records?.length ? (
-                  report.records.map((r, i) => (
+                ) : filteredRecords.length ? (
+                  filteredRecords.map((r, i) => (
                     <TableRow key={i} className={`border-slate-800 ${r.status === "late" ? "bg-red-950/30" : r.status === "early" ? "bg-emerald-950/30" : ""}`}>
                       <TableCell className="text-white font-medium">{r.user_name}</TableCell>
                       <TableCell className="text-slate-400 text-sm">{r.facility}</TableCell>
