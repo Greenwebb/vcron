@@ -302,6 +302,9 @@ const FacilitiesTab = () => {
   const [provinces, setProvinces] = useState([]);
   const [districts, setDistricts] = useState({});
   const [adding, setAdding] = useState(false);
+  const [facilitySearch, setFacilitySearch] = useState("");
+  const [provinceFilter, setProvinceFilter] = useState("all");
+  const [districtFilter, setDistrictFilter] = useState("all");
 
   const fetchFacilities = useCallback(async () => {
     try {
@@ -351,6 +354,17 @@ const FacilitiesTab = () => {
 
   const selectedProvinceDistricts = districts[newFacility.province] || [];
 
+  // Filter facilities based on search + province/district filters
+  const filteredFacilities = facilities.filter((f) => {
+    const matchesSearch = !facilitySearch || f.name.toLowerCase().includes(facilitySearch.toLowerCase()) || f.district?.toLowerCase().includes(facilitySearch.toLowerCase());
+    const matchesProvince = provinceFilter === "all" || f.province === provinceFilter;
+    const matchesDistrict = districtFilter === "all" || f.district === districtFilter;
+    return matchesSearch && matchesProvince && matchesDistrict;
+  });
+
+  // Get unique districts from facilities for the filter dropdown
+  const facilityDistrictsList = [...new Set(facilities.filter(f => provinceFilter === "all" || f.province === provinceFilter).map(f => f.district).filter(Boolean))].sort();
+
   return (
     <div className="space-y-6" data-testid="su-facilities">
       {/* Add Facility */}
@@ -386,10 +400,36 @@ const FacilitiesTab = () => {
         </CardContent>
       </Card>
 
+      {/* Search & Filter */}
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Input placeholder="Search facilities by name or district..." value={facilitySearch} onChange={(e) => setFacilitySearch(e.target.value)} className="pl-9 bg-slate-900 border-slate-700 text-white" data-testid="su-facility-search" />
+        </div>
+        <Select value={provinceFilter} onValueChange={(v) => { setProvinceFilter(v); setDistrictFilter("all"); }}>
+          <SelectTrigger className="w-48 bg-slate-900 border-slate-700 text-white" data-testid="su-fac-filter-province">
+            <SelectValue placeholder="Filter province" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Provinces</SelectItem>
+            {provinces.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={districtFilter} onValueChange={setDistrictFilter}>
+          <SelectTrigger className="w-48 bg-slate-900 border-slate-700 text-white" data-testid="su-fac-filter-district">
+            <SelectValue placeholder="Filter district" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Districts</SelectItem>
+            {facilityDistrictsList.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Facilities List */}
       <Card className="bg-slate-900 border-slate-800">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-['Manrope'] text-white">{facilities.length} Facilities</CardTitle>
+          <CardTitle className="text-base font-['Manrope'] text-white">{filteredFacilities.length} of {facilities.length} Facilities</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="max-h-[500px]">
@@ -403,7 +443,7 @@ const FacilitiesTab = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {facilities.map((f) => (
+                {filteredFacilities.map((f) => (
                   <TableRow key={f.facility_id} className="border-slate-800 hover:bg-slate-800/50">
                     <TableCell className="text-white font-medium">{f.name}</TableCell>
                     <TableCell className="text-slate-400">{f.district}</TableCell>
@@ -415,8 +455,8 @@ const FacilitiesTab = () => {
                     </TableCell>
                   </TableRow>
                 ))}
-                {facilities.length === 0 && (
-                  <TableRow><TableCell colSpan={4} className="text-center py-12 text-slate-500">No facilities. Add one above.</TableCell></TableRow>
+                {filteredFacilities.length === 0 && (
+                  <TableRow><TableCell colSpan={4} className="text-center py-12 text-slate-500">{facilities.length === 0 ? "No facilities. Add one above." : "No facilities match your search."}</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>

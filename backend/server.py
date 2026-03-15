@@ -367,14 +367,20 @@ async def register(user_data: UserCreate):
     if user_data.province not in province_names:
         raise HTTPException(status_code=400, detail="Invalid province")
     
-    # Validate district
-    districts = DISTRICTS.get(user_data.province, [])
-    if user_data.district not in districts:
+    # Validate district (check hardcoded + DB)
+    hardcoded_districts = DISTRICTS.get(user_data.province, [])
+    db_facs = await db.facilities.find({"province": user_data.province}, {"_id": 0, "district": 1}).to_list(1000)
+    db_districts = [f["district"] for f in db_facs if f.get("district")]
+    all_districts = set(hardcoded_districts + db_districts)
+    if user_data.district not in all_districts:
         raise HTTPException(status_code=400, detail="Invalid district for selected province")
     
-    # Validate facility
-    facilities = FACILITIES_BY_DISTRICT.get(user_data.district, [])
-    if user_data.facility not in facilities:
+    # Validate facility (check hardcoded + DB)
+    hardcoded_facilities = FACILITIES_BY_DISTRICT.get(user_data.district, [])
+    db_facs2 = await db.facilities.find({"district": user_data.district}, {"_id": 0, "name": 1}).to_list(1000)
+    db_facility_names = [f["name"] for f in db_facs2 if f.get("name")]
+    all_facilities = set(hardcoded_facilities + db_facility_names)
+    if user_data.facility not in all_facilities:
         raise HTTPException(status_code=400, detail="Invalid facility for selected district")
     
     # Validate position
@@ -590,14 +596,20 @@ async def complete_registration(request: Request, user: dict = Depends(get_curre
     if province not in province_names:
         raise HTTPException(status_code=400, detail="Invalid province")
     
-    # Validate district
-    districts = DISTRICTS.get(province, [])
-    if district not in districts:
+    # Validate district (check hardcoded + DB)
+    hardcoded_districts = DISTRICTS.get(province, [])
+    db_facs = await db.facilities.find({"province": province}, {"_id": 0, "district": 1}).to_list(1000)
+    db_districts = [f["district"] for f in db_facs if f.get("district")]
+    all_districts = set(hardcoded_districts + db_districts)
+    if district not in all_districts:
         raise HTTPException(status_code=400, detail="Invalid district for selected province")
     
-    # Validate facility
-    facilities = FACILITIES_BY_DISTRICT.get(district, [])
-    if facility not in facilities:
+    # Validate facility (check hardcoded + DB)
+    hardcoded_facilities = FACILITIES_BY_DISTRICT.get(district, [])
+    db_facs2 = await db.facilities.find({"district": district}, {"_id": 0, "name": 1}).to_list(1000)
+    db_facility_names = [f["name"] for f in db_facs2 if f.get("name")]
+    all_facilities = set(hardcoded_facilities + db_facility_names)
+    if facility not in all_facilities:
         raise HTTPException(status_code=400, detail="Invalid facility for selected district")
     
     # Validate position
@@ -655,13 +667,21 @@ async def get_provinces():
 
 @api_router.get("/districts/{province}")
 async def get_districts(province: str):
-    districts = DISTRICTS.get(province, [])
-    return {"province": province, "districts": districts}
+    # Merge hardcoded districts with DB-stored facilities' districts
+    hardcoded = DISTRICTS.get(province, [])
+    db_facilities = await db.facilities.find({"province": province}, {"_id": 0, "district": 1}).to_list(1000)
+    db_districts = list({f["district"] for f in db_facilities if f.get("district")})
+    merged = sorted(set(hardcoded + db_districts))
+    return {"province": province, "districts": merged}
 
 @api_router.get("/facilities/{district}")
 async def get_facilities_by_district(district: str):
-    facilities = FACILITIES_BY_DISTRICT.get(district, [])
-    return {"district": district, "facilities": facilities}
+    # Merge hardcoded facilities with DB-stored facilities for this district
+    hardcoded = FACILITIES_BY_DISTRICT.get(district, [])
+    db_facilities = await db.facilities.find({"district": district}, {"_id": 0, "name": 1}).to_list(1000)
+    db_names = [f["name"] for f in db_facilities if f.get("name")]
+    merged = sorted(set(hardcoded + db_names))
+    return {"district": district, "facilities": merged}
 
 # ===================== ATTENDANCE ROUTES =====================
 
