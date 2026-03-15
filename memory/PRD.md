@@ -50,6 +50,11 @@ Build a mobile and web MVP application called "v-chron" for attendance tracking 
 - Clear button resets all filters; export buttons pass filters to API
 - 100% test pass rate (23/23 tests)
 
+### Bug Fix: Reports Filter Priority + Blank Export (March 2026)
+- Fixed: Facility filter now takes priority over district/province when all 3 are set (if/elif/elif)
+- Fixed: Export CSV/Excel no longer blank — merges hardcoded+DB facility names in lookups
+- 100% test pass rate (21/21 tests)
+
 ## User Roles
 1. **User** - Can clock in/out, view history
 2. **Admin** - Can view all users, attendance, export reports, send backups
