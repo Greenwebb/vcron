@@ -1035,6 +1035,407 @@ async def send_backup_email(
         logger.error(f"Failed to send email: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
+# ===================== SUPER USER ROUTES =====================
+
+@api_router.delete("/superuser/users/{user_id}")
+async def delete_user(user_id: str, user: dict = Depends(get_superuser)):
+    """Delete a user (Super User only)"""
+    if user["user_id"] == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    
+    result = await db.users.delete_one({"user_id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Also delete user sessions
+    await db.user_sessions.delete_many({"user_id": user_id})
+    
+    return {"message": "User deleted successfully"}
+
+@api_router.post("/superuser/users/{user_id}/reset-password")
+async def reset_user_password(user_id: str, data: PasswordReset, user: dict = Depends(get_superuser)):
+    """Reset a user's password (Super User only)"""
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    hashed_password = hash_password(data.new_password)
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"password": hashed_password}}
+    )
+    
+    return {"message": "Password reset successfully"}
+
+@api_router.put("/superuser/users/{user_id}/role")
+async def update_user_role(user_id: str, request: Request, user: dict = Depends(get_superuser)):
+    """Update user role and assigned scope (Super User only)"""
+    body = await request.json()
+    role = body.get("role")
+    assigned_scope = body.get("assigned_scope")
+    
+    if role not in ["user", "admin", "superuser"]:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    
+    update_data = {"role": role}
+    if assigned_scope:
+        update_data["assigned_scope"] = assigned_scope
+    
+    result = await db.users.update_one({"user_id": user_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    updated_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
+    return updated_user
+
+# Facility Management
+@api_router.get("/superuser/facilities")
+async def get_all_facilities_admin(user: dict = Depends(get_superuser)):
+    """Get all facilities with full details"""
+    facilities = await db.facilities.find({}, {"_id": 0}).to_list(1000)
+    if not facilities:
+        # Initialize from FACILITIES_BY_DISTRICT if empty
+        for district, facility_list in FACILITIES_BY_DISTRICT.items():
+            province = "Central Province"  # Default for Mkushi
+            for facility_name in facility_list:
+                await db.facilities.insert_one({
+                    "facility_id": f"fac_{uuid.uuid4().hex[:12]}",
+                    "name": facility_name,
+                    "district": district,
+                    "province": province,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+        facilities = await db.facilities.find({}, {"_id": 0}).to_list(1000)
+    return {"facilities": facilities}
+
+@api_router.post("/superuser/facilities")
+async def create_facility(facility: FacilityCreate, user: dict = Depends(get_superuser)):
+    """Create a new facility"""
+    existing = await db.facilities.find_one({"name": facility.name, "district": facility.district}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Facility already exists")
+    
+    facility_doc = {
+        "facility_id": f"fac_{uuid.uuid4().hex[:12]}",
+        "name": facility.name,
+        "district": facility.district,
+        "province": facility.province,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.facilities.insert_one(facility_doc)
+    return facility_doc
+
+@api_router.put("/superuser/facilities/{facility_id}")
+async def update_facility(facility_id: str, facility: FacilityUpdate, user: dict = Depends(get_superuser)):
+    """Update a facility"""
+    update_data = {k: v for k, v in facility.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No update data provided")
+    
+    result = await db.facilities.update_one({"facility_id": facility_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Facility not found")
+    
+    updated = await db.facilities.find_one({"facility_id": facility_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/superuser/facilities/{facility_id}")
+async def delete_facility(facility_id: str, user: dict = Depends(get_superuser)):
+    """Delete a facility"""
+    result = await db.facilities.delete_one({"facility_id": facility_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Facility not found")
+    return {"message": "Facility deleted successfully"}
+
+# Shift Configuration
+@api_router.get("/superuser/shifts")
+async def get_shift_config(user: dict = Depends(get_superuser)):
+    """Get shift configuration"""
+    config = await db.shift_config.find_one({}, {"_id": 0})
+    if not config:
+        config = {
+            "config_id": "default",
+            "morning_start": "06:00",
+            "morning_end": "14:00",
+            "afternoon_start": "14:00",
+            "afternoon_end": "22:00",
+            "night_start": "22:00",
+            "night_end": "06:00",
+            "four_off_start": "07:00",
+            "four_off_end": "19:00",
+            "grace_period_minutes": 15
+        }
+        await db.shift_config.insert_one(config)
+    return config
+
+@api_router.put("/superuser/shifts")
+async def update_shift_config(config: ShiftConfig, user: dict = Depends(get_superuser)):
+    """Update shift configuration"""
+    config_data = config.model_dump()
+    config_data["config_id"] = "default"
+    config_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.shift_config.update_one(
+        {"config_id": "default"},
+        {"$set": config_data},
+        upsert=True
+    )
+    
+    return config_data
+
+# Attendance Reports with Late/Early highlighting
+@api_router.get("/superuser/attendance-report")
+async def get_attendance_report(
+    date: Optional[str] = None,
+    province: Optional[str] = None,
+    district: Optional[str] = None,
+    facility: Optional[str] = None,
+    user: dict = Depends(get_superuser)
+):
+    """Get attendance report with late/early status"""
+    query = {}
+    
+    if facility:
+        query["facility"] = facility
+    if district:
+        # Get all facilities in district
+        facilities_in_district = await db.facilities.find({"district": district}, {"name": 1, "_id": 0}).to_list(100)
+        if facilities_in_district:
+            query["facility"] = {"$in": [f["name"] for f in facilities_in_district]}
+    if province:
+        facilities_in_province = await db.facilities.find({"province": province}, {"name": 1, "_id": 0}).to_list(500)
+        if facilities_in_province:
+            query["facility"] = {"$in": [f["name"] for f in facilities_in_province]}
+    
+    if date:
+        try:
+            date_obj = datetime.fromisoformat(date.replace('Z', '+00:00'))
+            start = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(days=1)
+            query["timestamp"] = {"$gte": start.isoformat(), "$lt": end.isoformat()}
+        except Exception:
+            pass
+    
+    # Get shift config
+    shift_config = await db.shift_config.find_one({}, {"_id": 0})
+    if not shift_config:
+        shift_config = {
+            "morning_start": "06:00",
+            "afternoon_start": "14:00",
+            "night_start": "22:00",
+            "four_off_start": "07:00",
+            "grace_period_minutes": 15
+        }
+    
+    grace_minutes = shift_config.get("grace_period_minutes", 15)
+    
+    records = await db.attendance.find(query, {"_id": 0}).sort("timestamp", -1).to_list(10000)
+    
+    # Process records to add late/early status
+    processed_records = []
+    for record in records:
+        if record.get("action") == "login":
+            timestamp = record.get("timestamp", "")
+            try:
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                time_str = dt.strftime("%H:%M")
+                
+                # Determine expected shift start
+                morning_start = shift_config.get("morning_start", "06:00")
+                afternoon_start = shift_config.get("afternoon_start", "14:00")
+                night_start = shift_config.get("night_start", "22:00")
+                
+                # Simple logic: compare with morning shift for now
+                expected_time = datetime.strptime(morning_start, "%H:%M")
+                grace_time = expected_time + timedelta(minutes=grace_minutes)
+                actual_time = datetime.strptime(time_str, "%H:%M")
+                
+                if actual_time <= expected_time:
+                    record["status"] = "early"
+                elif actual_time <= grace_time:
+                    record["status"] = "on_time"
+                else:
+                    record["status"] = "late"
+                    record["minutes_late"] = int((actual_time - grace_time).total_seconds() / 60)
+            except Exception:
+                record["status"] = "unknown"
+        else:
+            record["status"] = "logout"
+        
+        processed_records.append(record)
+    
+    # Calculate summary
+    late_count = sum(1 for r in processed_records if r.get("status") == "late")
+    early_count = sum(1 for r in processed_records if r.get("status") == "early")
+    on_time_count = sum(1 for r in processed_records if r.get("status") == "on_time")
+    
+    return {
+        "records": processed_records,
+        "summary": {
+            "total": len([r for r in processed_records if r.get("action") == "login"]),
+            "late": late_count,
+            "early": early_count,
+            "on_time": on_time_count
+        }
+    }
+
+# Export by scope
+@api_router.get("/superuser/export")
+async def superuser_export(
+    province: Optional[str] = None,
+    district: Optional[str] = None,
+    facility: Optional[str] = None,
+    date: Optional[str] = None,
+    format: str = "xlsx",
+    user: dict = Depends(get_superuser)
+):
+    """Export attendance data filtered by province/district/facility"""
+    query = {}
+    
+    if facility:
+        query["facility"] = facility
+    elif district:
+        facilities_in_district = await db.facilities.find({"district": district}, {"name": 1, "_id": 0}).to_list(100)
+        if facilities_in_district:
+            query["facility"] = {"$in": [f["name"] for f in facilities_in_district]}
+    elif province:
+        facilities_in_province = await db.facilities.find({"province": province}, {"name": 1, "_id": 0}).to_list(500)
+        if facilities_in_province:
+            query["facility"] = {"$in": [f["name"] for f in facilities_in_province]}
+    
+    if date:
+        try:
+            date_obj = datetime.fromisoformat(date.replace('Z', '+00:00'))
+            start = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(days=1)
+            query["timestamp"] = {"$gte": start.isoformat(), "$lt": end.isoformat()}
+        except Exception:
+            pass
+    
+    records = await db.attendance.find(query, {"_id": 0}).sort("timestamp", -1).to_list(10000)
+    
+    # Get shift config for late/early calculation
+    shift_config = await db.shift_config.find_one({}, {"_id": 0}) or {"morning_start": "06:00", "grace_period_minutes": 15}
+    grace_minutes = shift_config.get("grace_period_minutes", 15)
+    morning_start = shift_config.get("morning_start", "06:00")
+    
+    if format == "csv":
+        import csv
+        from io import StringIO
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Staff Name", "Position", "Facility", "Location Type", "Action", "Timestamp", "Status", "Latitude", "Longitude"])
+        
+        for r in records:
+            status = ""
+            if r.get("action") == "login":
+                try:
+                    dt = datetime.fromisoformat(r.get("timestamp", "").replace('Z', '+00:00'))
+                    time_str = dt.strftime("%H:%M")
+                    expected_time = datetime.strptime(morning_start, "%H:%M")
+                    grace_time = expected_time + timedelta(minutes=grace_minutes)
+                    actual_time = datetime.strptime(time_str, "%H:%M")
+                    
+                    if actual_time <= expected_time:
+                        status = "EARLY"
+                    elif actual_time <= grace_time:
+                        status = "ON TIME"
+                    else:
+                        status = "LATE"
+                except Exception:
+                    status = ""
+            
+            writer.writerow([
+                r.get("user_name", ""),
+                r.get("position", ""),
+                r.get("facility", ""),
+                r.get("area_of_allocation", ""),
+                r.get("action", ""),
+                r.get("timestamp", ""),
+                status,
+                r.get("latitude", ""),
+                r.get("longitude", "")
+            ])
+        
+        scope_name = facility or district or province or "all"
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=attendance_{scope_name}_{date or 'all'}.csv"}
+        )
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Attendance"
+        
+        headers = ["Staff Name", "Position", "Facility", "Location Type", "Action", "Timestamp", "Status", "Latitude", "Longitude"]
+        ws.append(headers)
+        
+        # Style header
+        from openpyxl.styles import PatternFill, Font
+        header_fill = PatternFill(start_color="0F766E", end_color="0F766E", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        late_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
+        early_fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+        
+        for r in records:
+            status = ""
+            row_fill = None
+            if r.get("action") == "login":
+                try:
+                    dt = datetime.fromisoformat(r.get("timestamp", "").replace('Z', '+00:00'))
+                    time_str = dt.strftime("%H:%M")
+                    expected_time = datetime.strptime(morning_start, "%H:%M")
+                    grace_time = expected_time + timedelta(minutes=grace_minutes)
+                    actual_time = datetime.strptime(time_str, "%H:%M")
+                    
+                    if actual_time <= expected_time:
+                        status = "EARLY"
+                        row_fill = early_fill
+                    elif actual_time <= grace_time:
+                        status = "ON TIME"
+                        row_fill = early_fill
+                    else:
+                        status = "LATE"
+                        row_fill = late_fill
+                except Exception:
+                    status = ""
+            
+            row = [
+                r.get("user_name", ""),
+                r.get("position", ""),
+                r.get("facility", ""),
+                r.get("area_of_allocation", ""),
+                r.get("action", ""),
+                r.get("timestamp", ""),
+                status,
+                r.get("latitude", ""),
+                r.get("longitude", "")
+            ]
+            ws.append(row)
+            
+            # Apply color to row
+            if row_fill:
+                for cell in ws[ws.max_row]:
+                    cell.fill = row_fill
+        
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        scope_name = facility or district or province or "all"
+        return Response(
+            content=output.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=attendance_{scope_name}_{date or 'all'}.xlsx"}
+        )
+
 # ===================== HEALTH CHECK =====================
 
 @api_router.get("/")
