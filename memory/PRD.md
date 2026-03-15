@@ -55,6 +55,12 @@ Build a mobile and web MVP application called "v-chron" for attendance tracking 
 - Fixed: Export CSV/Excel no longer blank — merges hardcoded+DB facility names in lookups
 - 100% test pass rate (21/21 tests)
 
+### Bug Fix: Excel Export + Late Time Format (March 2026)
+- Fixed: Excel export no longer shows "unrecoverable problem" — used 8-digit ARGB colors, explicit cell writing, StreamingResponse
+- Fixed: Late status now shows hours and minutes (e.g., "1h 45m") instead of only minutes, in both UI and exports
+- Added "Time Late" column to CSV/Excel exports
+- 100% test pass rate (16/16 tests)
+
 ## User Roles
 1. **User** - Can clock in/out, view history
 2. **Admin** - Can view all users, attendance, export reports, send backups
