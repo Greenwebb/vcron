@@ -20,7 +20,8 @@ import {
   Briefcase,
   Menu,
   X,
-  Phone
+  Phone,
+  Shield
 } from "lucide-react";
 import { API } from "@/App";
 import localforage from "localforage";
@@ -355,6 +356,28 @@ const Dashboard = () => {
                 Admin
               </Button>
             )}
+            {user?.role === "superuser" && (
+              <>
+                <Button 
+                  variant="ghost" 
+                  className="text-slate-600"
+                  onClick={() => navigate("/admin")}
+                  data-testid="admin-nav-btn"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Admin
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  className="text-amber-700"
+                  onClick={() => navigate("/superuser")}
+                  data-testid="superuser-nav-btn"
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Super User
+                </Button>
+              </>
+            )}
             <Button 
               variant="outline" 
               className="border-slate-200"
@@ -397,6 +420,26 @@ const Dashboard = () => {
                 <Settings className="w-4 h-4 mr-2" />
                 Admin Dashboard
               </Button>
+            )}
+            {user?.role === "superuser" && (
+              <>
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-start text-slate-600"
+                  onClick={() => { navigate("/admin"); setMobileMenuOpen(false); }}
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Admin Dashboard
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-start text-amber-700"
+                  onClick={() => { navigate("/superuser"); setMobileMenuOpen(false); }}
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Super User Panel
+                </Button>
+              </>
             )}
             <Button 
               variant="ghost" 

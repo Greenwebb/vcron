@@ -8,6 +8,7 @@ import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
 import History from "@/pages/History";
 import AdminDashboard from "@/pages/AdminDashboard";
+import SuperUserDashboard from "@/pages/SuperUserDashboard";
 import CompleteRegistration from "@/pages/CompleteRegistration";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -177,7 +178,7 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
     return <Navigate to="/login" />;
   }
 
-  if (requireAdmin && userData?.role !== 'admin') {
+  if (requireAdmin && userData?.role !== 'admin' && userData?.role !== 'superuser') {
     return <Navigate to="/dashboard" />;
   }
 
@@ -216,6 +217,11 @@ function AppRouter() {
       <Route path="/admin" element={
         <ProtectedRoute requireAdmin>
           <AdminDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/superuser" element={
+        <ProtectedRoute requireAdmin>
+          <SuperUserDashboard />
         </ProtectedRoute>
       } />
     </Routes>

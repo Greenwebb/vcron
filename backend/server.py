@@ -1037,6 +1037,97 @@ async def send_backup_email(
 
 # ===================== SUPER USER ROUTES =====================
 
+@api_router.get("/superuser/stats")
+async def superuser_stats(user: dict = Depends(get_superuser)):
+    """Get dashboard statistics for super user"""
+    total_users = await db.users.count_documents({})
+    total_admins = await db.users.count_documents({"role": "admin"})
+    total_superusers = await db.users.count_documents({"role": "superuser"})
+    total_facilities_count = await db.facilities.count_documents({})
+    
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_logins = await db.attendance.count_documents({
+        "action": "login",
+        "timestamp": {"$gte": today.isoformat()}
+    })
+    today_logouts = await db.attendance.count_documents({
+        "action": "logout",
+        "timestamp": {"$gte": today.isoformat()}
+    })
+    
+    # Currently on duty
+    today_records = await db.attendance.find(
+        {"timestamp": {"$gte": today.isoformat()}},
+        {"_id": 0}
+    ).sort("timestamp", -1).to_list(5000)
+    
+    user_status = {}
+    for record in today_records:
+        uid = record["user_id"]
+        if uid not in user_status:
+            user_status[uid] = record
+    on_duty = sum(1 for r in user_status.values() if r["action"] == "login")
+    
+    return {
+        "total_users": total_users,
+        "total_admins": total_admins,
+        "total_superusers": total_superusers,
+        "total_facilities": total_facilities_count if total_facilities_count > 0 else len(FACILITIES),
+        "today_logins": today_logins,
+        "today_logouts": today_logouts,
+        "currently_on_duty": on_duty
+    }
+
+@api_router.post("/superuser/promote")
+async def promote_to_superuser(request: Request, user: dict = Depends(get_superuser)):
+    """Promote a user to superuser by email"""
+    body = await request.json()
+    email = body.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    
+    target = await db.users.find_one({"email": email}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.users.update_one({"email": email}, {"$set": {"role": "superuser"}})
+    return {"message": f"User {email} promoted to superuser"}
+
+@api_router.get("/superuser/users")
+async def superuser_get_users(
+    skip: int = 0,
+    limit: int = 100,
+    role: Optional[str] = None,
+    facility: Optional[str] = None,
+    search: Optional[str] = None,
+    user: dict = Depends(get_superuser)
+):
+    """Get all users with filters (Super User only)"""
+    query = {}
+    if role and role != "all":
+        query["role"] = role
+    if facility and facility != "all":
+        query["facility"] = facility
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}}
+        ]
+    
+    users = await db.users.find(query, {"_id": 0, "password": 0}).skip(skip).limit(limit).to_list(limit)
+    total = await db.users.count_documents(query)
+    return {"users": users, "total": total}
+
+@api_router.get("/superuser/provinces")
+async def superuser_get_provinces(user: dict = Depends(get_superuser)):
+    """Get all provinces"""
+    return {"provinces": PROVINCES}
+
+@api_router.get("/superuser/districts")
+async def superuser_get_districts(user: dict = Depends(get_superuser)):
+    """Get all districts by province"""
+    return {"districts": DISTRICTS}
+
 @api_router.delete("/superuser/users/{user_id}")
 async def delete_user(user_id: str, user: dict = Depends(get_superuser)):
     """Delete a user (Super User only)"""
@@ -1124,7 +1215,8 @@ async def create_facility(facility: FacilityCreate, user: dict = Depends(get_sup
     }
     
     await db.facilities.insert_one(facility_doc)
-    return facility_doc
+    created = await db.facilities.find_one({"facility_id": facility_doc["facility_id"]}, {"_id": 0})
+    return created
 
 @api_router.put("/superuser/facilities/{facility_id}")
 async def update_facility(facility_id: str, facility: FacilityUpdate, user: dict = Depends(get_superuser)):
@@ -1167,6 +1259,7 @@ async def get_shift_config(user: dict = Depends(get_superuser)):
             "grace_period_minutes": 15
         }
         await db.shift_config.insert_one(config)
+        config = await db.shift_config.find_one({"config_id": "default"}, {"_id": 0})
     return config
 
 @api_router.put("/superuser/shifts")
@@ -1435,6 +1528,27 @@ async def superuser_export(
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename=attendance_{scope_name}_{date or 'all'}.xlsx"}
         )
+
+# ===================== BOOTSTRAP SUPERUSER =====================
+
+@api_router.post("/superuser/bootstrap")
+async def bootstrap_superuser(request: Request):
+    """Bootstrap: Promote a user to superuser. Only works if no superusers exist."""
+    existing_su = await db.users.find_one({"role": "superuser"}, {"_id": 0})
+    if existing_su:
+        raise HTTPException(status_code=403, detail="A superuser already exists. Use the promote endpoint instead.")
+    
+    body = await request.json()
+    email = body.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    
+    target = await db.users.find_one({"email": email}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.users.update_one({"email": email}, {"$set": {"role": "superuser"}})
+    return {"message": f"User {email} has been promoted to superuser"}
 
 # ===================== HEALTH CHECK =====================
 
