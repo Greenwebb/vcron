@@ -43,6 +43,13 @@ Build a mobile and web MVP application called "v-chron" for attendance tracking 
 - Added search, province filter, and district filter to Super User Facilities tab
 - 100% test pass rate (11/11 tests)
 
+### Reports Filters Enhancement (March 2026)
+- Added cascading Province → District → Facility dropdown filters to Reports tab
+- Added search bar for filtering records by staff name, facility, or position
+- Summary cards dynamically update based on filtered results
+- Clear button resets all filters; export buttons pass filters to API
+- 100% test pass rate (23/23 tests)
+
 ## User Roles
 1. **User** - Can clock in/out, view history
 2. **Admin** - Can view all users, attendance, export reports, send backups
