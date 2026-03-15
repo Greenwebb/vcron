@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1380,7 +1380,14 @@ async def get_attendance_report(
                     record["status"] = "on_time"
                 else:
                     record["status"] = "late"
-                    record["minutes_late"] = int((actual_time - grace_time).total_seconds() / 60)
+                    total_late_mins = int((actual_time - grace_time).total_seconds() / 60)
+                    record["minutes_late"] = total_late_mins
+                    hours = total_late_mins // 60
+                    mins = total_late_mins % 60
+                    if hours > 0:
+                        record["late_display"] = f"{hours}h {mins}m"
+                    else:
+                        record["late_display"] = f"{mins}m"
             except Exception:
                 record["status"] = "unknown"
         else:
@@ -1458,10 +1465,11 @@ async def superuser_export(
         
         output = StringIO()
         writer = csv.writer(output)
-        writer.writerow(["Staff Name", "Position", "Facility", "Location Type", "Action", "Timestamp", "Status", "Latitude", "Longitude"])
+        writer.writerow(["Staff Name", "Position", "Facility", "Location Type", "Action", "Timestamp", "Status", "Time Late", "Latitude", "Longitude"])
         
         for r in records:
             status = ""
+            late_display = ""
             if r.get("action") == "login":
                 try:
                     dt = datetime.fromisoformat(r.get("timestamp", "").replace('Z', '+00:00'))
@@ -1476,6 +1484,10 @@ async def superuser_export(
                         status = "ON TIME"
                     else:
                         status = "LATE"
+                        total_late_mins = int((actual_time - grace_time).total_seconds() / 60)
+                        hours = total_late_mins // 60
+                        mins = total_late_mins % 60
+                        late_display = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
                 except Exception:
                     status = ""
             
@@ -1487,6 +1499,7 @@ async def superuser_export(
                 r.get("action", ""),
                 r.get("timestamp", ""),
                 status,
+                late_display,
                 r.get("latitude", ""),
                 r.get("longitude", "")
             ])
@@ -1500,21 +1513,23 @@ async def superuser_export(
     else:
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Attendance"
+        ws.title = "Attendance Report"
         
-        headers = ["Staff Name", "Position", "Facility", "Location Type", "Action", "Timestamp", "Status", "Latitude", "Longitude"]
-        ws.append(headers)
+        headers = ["Staff Name", "Position", "Facility", "Location Type", "Action", "Timestamp", "Status", "Time Late", "Latitude", "Longitude"]
+        for col_idx, header_val in enumerate(headers, 1):
+            ws.cell(row=1, column=col_idx, value=header_val)
         
         # Style header
         from openpyxl.styles import PatternFill, Font
-        header_fill = PatternFill(start_color="0F766E", end_color="0F766E", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
+        from openpyxl.utils import get_column_letter
+        header_fill = PatternFill(start_color="FF0F766E", end_color="FF0F766E", fill_type="solid")
+        header_font = Font(color="FFFFFFFF", bold=True)
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
         
-        late_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
-        early_fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+        late_fill = PatternFill(start_color="FFFEE2E2", end_color="FFFEE2E2", fill_type="solid")
+        early_fill = PatternFill(start_color="FFDCFCE7", end_color="FFDCFCE7", fill_type="solid")
         
         for r in records:
             status = ""
@@ -1536,36 +1551,47 @@ async def superuser_export(
                     else:
                         status = "LATE"
                         row_fill = late_fill
+                        total_late_mins = int((actual_time - grace_time).total_seconds() / 60)
+                        hours = total_late_mins // 60
+                        mins = total_late_mins % 60
+                        late_display = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
                 except Exception:
                     status = ""
+                    late_display = ""
             
             row = [
-                r.get("user_name", ""),
-                r.get("position", ""),
-                r.get("facility", ""),
-                r.get("area_of_allocation", ""),
-                r.get("action", ""),
-                r.get("timestamp", ""),
+                r.get("user_name", "") or "",
+                r.get("position", "") or "",
+                r.get("facility", "") or "",
+                r.get("area_of_allocation", "") or "",
+                r.get("action", "") or "",
+                r.get("timestamp", "") or "",
                 status,
-                r.get("latitude", ""),
-                r.get("longitude", "")
+                late_display if status == "LATE" else "",
+                str(r.get("latitude") or ""),
+                str(r.get("longitude") or "")
             ]
-            ws.append(row)
-            
-            # Apply color to row
-            if row_fill:
-                for cell in ws[ws.max_row]:
+            row_num = ws.max_row + 1
+            for col_idx, val in enumerate(row, 1):
+                clean_val = "" if val is None else val
+                cell = ws.cell(row=row_num, column=col_idx, value=clean_val)
+                if row_fill:
                     cell.fill = row_fill
+        
+        # Set column widths for readability
+        col_widths = [25, 20, 30, 15, 10, 30, 10, 12, 12, 12]
+        for i, w in enumerate(col_widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
         
         output = BytesIO()
         wb.save(output)
         output.seek(0)
         
         scope_name = facility or district or province or "all"
-        return Response(
-            content=output.getvalue(),
+        return StreamingResponse(
+            output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename=attendance_{scope_name}_{date or 'all'}.xlsx"}
+            headers={"Content-Disposition": f'attachment; filename="attendance_{scope_name}_{date or "all"}.xlsx"'}
         )
 
 # ===================== BOOTSTRAP SUPERUSER =====================

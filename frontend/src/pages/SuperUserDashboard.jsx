@@ -624,12 +624,18 @@ const ReportsTab = () => {
       params.append("format", format);
       const res = await fetch(`${API}/superuser/export?${params}`, { credentials: "include" });
       if (res.ok) {
-        const blob = await res.blob();
+        const arrayBuffer = await res.arrayBuffer();
+        const mimeType = format === "csv"
+          ? "text/csv"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        const blob = new Blob([arrayBuffer], { type: mimeType });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a"); a.href = url;
-        a.download = `report_${date || "all"}.${format === "csv" ? "csv" : "xlsx"}`;
+        a.download = `attendance_report_${date || "all"}.${format === "csv" ? "csv" : "xlsx"}`;
         document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); a.remove();
         toast.success(`Exported as ${format.toUpperCase()}`);
+      } else {
+        toast.error("Export failed");
       }
     } catch { toast.error("Export failed"); }
   };
@@ -811,7 +817,7 @@ const ReportsTab = () => {
                         {new Date(r.timestamp).toLocaleTimeString()}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={r.status} minutesLate={r.minutes_late} />
+                        <StatusBadge status={r.status} minutesLate={r.minutes_late} lateDisplay={r.late_display} />
                       </TableCell>
                     </TableRow>
                   ))
@@ -837,10 +843,10 @@ const RoleBadge = ({ role }) => {
   return <Badge className={styles[role] || styles.user}>{role}</Badge>;
 };
 
-const StatusBadge = ({ status, minutesLate }) => {
+const StatusBadge = ({ status, minutesLate, lateDisplay }) => {
   if (status === "early") return <span className="flex items-center gap-1 text-emerald-400 text-sm"><CheckCircle2 className="w-3.5 h-3.5" />Early</span>;
   if (status === "on_time") return <span className="flex items-center gap-1 text-blue-400 text-sm"><CheckCircle2 className="w-3.5 h-3.5" />On Time</span>;
-  if (status === "late") return <span className="flex items-center gap-1 text-red-400 text-sm"><AlertTriangle className="w-3.5 h-3.5" />Late{minutesLate ? ` (${minutesLate}m)` : ""}</span>;
+  if (status === "late") return <span className="flex items-center gap-1 text-red-400 text-sm"><AlertTriangle className="w-3.5 h-3.5" />Late{lateDisplay ? ` (${lateDisplay})` : minutesLate ? ` (${minutesLate}m)` : ""}</span>;
   if (status === "logout") return <span className="text-slate-500 text-sm">Logout</span>;
   return <span className="text-slate-600 text-sm">-</span>;
 };

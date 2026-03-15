@@ -1,0 +1,10 @@
+Staff Name,Position,Facility,Location Type,Action,Timestamp,Status,Time Late,Latitude,Longitude
+Ethan Chinjamba,Pharmacist,Kabwe Central Hospital,Facility,login,2026-03-15T09:30:33.498269+00:00,LATE,1h 45m,,
+Chizawu Chinjamba,Medical Doctor,Kabwe Central Hospital,Facility,login,2026-03-15T09:29:42.542935+00:00,LATE,1h 44m,,
+ethan donald,Medical Doctor,Kapiri District Hospital,Facility,login,2026-03-15T09:29:08.877831+00:00,LATE,1h 44m,,
+Chizawu Chinjamba,Medical Doctor,Kabwe Central Hospital,Facility,logout,2026-03-15T08:56:40.579681+00:00,,,,
+Chizawu Chinjamba,Medical Doctor,Kabwe Central Hospital,Facility,login,2026-03-15T08:56:27.086763+00:00,LATE,1h 11m,,
+Chizawu Chinjamba,Medical Doctor,Kabwe Central Hospital,Facility,logout,2026-03-15T08:53:10.845183+00:00,,,,
+Chizawu Chinjamba,Medical Doctor,Kabwe Central Hospital,Facility,login,2026-03-15T08:53:01.320982+00:00,LATE,1h 8m,,
+Ethan Chinjamba,Administrative Staff,Mkushi District Hospital,Facility,logout,2026-03-15T08:45:39.117618+00:00,,,,
+Ethan Chinjamba,Administrative Staff,Mkushi District Hospital,Facility,login,2026-03-15T08:45:30.679222+00:00,LATE,1h 0m,,
