@@ -36,6 +36,13 @@ Build a mobile and web MVP application called "v-chron" for attendance tracking 
 - `dcchinjamba@gmail.com` promoted to superuser
 - 100% test pass rate (29/29 tests)
 
+### Bug Fix: Facilities Sync (March 2026)
+- Fixed: Facilities added via Super User now appear in registration dropdowns
+- Updated `/api/facilities/{district}` and `/api/districts/{province}` to merge hardcoded + DB data
+- Updated registration and complete-registration validation to accept DB-stored facilities
+- Added search, province filter, and district filter to Super User Facilities tab
+- 100% test pass rate (11/11 tests)
+
 ## User Roles
 1. **User** - Can clock in/out, view history
 2. **Admin** - Can view all users, attendance, export reports, send backups
