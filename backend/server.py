@@ -1311,15 +1311,25 @@ async def get_attendance_report(
     
     if facility:
         query["facility"] = facility
-    if district:
-        # Get all facilities in district
-        facilities_in_district = await db.facilities.find({"district": district}, {"name": 1, "_id": 0}).to_list(100)
-        if facilities_in_district:
-            query["facility"] = {"$in": [f["name"] for f in facilities_in_district]}
-    if province:
-        facilities_in_province = await db.facilities.find({"province": province}, {"name": 1, "_id": 0}).to_list(500)
-        if facilities_in_province:
-            query["facility"] = {"$in": [f["name"] for f in facilities_in_province]}
+    elif district:
+        # Get all facilities in district - merge DB + hardcoded
+        db_facilities = await db.facilities.find({"district": district}, {"name": 1, "_id": 0}).to_list(500)
+        db_names = [f["name"] for f in db_facilities]
+        hardcoded_names = FACILITIES_BY_DISTRICT.get(district, [])
+        all_fac_names = list(set(db_names + hardcoded_names))
+        if all_fac_names:
+            query["facility"] = {"$in": all_fac_names}
+    elif province:
+        # Get all facilities in province - merge DB + hardcoded districts/facilities
+        db_facilities = await db.facilities.find({"province": province}, {"name": 1, "_id": 0}).to_list(2000)
+        db_names = [f["name"] for f in db_facilities]
+        province_districts = DISTRICTS.get(province, [])
+        hardcoded_names = []
+        for d in province_districts:
+            hardcoded_names.extend(FACILITIES_BY_DISTRICT.get(d, []))
+        all_fac_names = list(set(db_names + hardcoded_names))
+        if all_fac_names:
+            query["facility"] = {"$in": all_fac_names}
     
     if date:
         try:
@@ -1409,13 +1419,22 @@ async def superuser_export(
     if facility:
         query["facility"] = facility
     elif district:
-        facilities_in_district = await db.facilities.find({"district": district}, {"name": 1, "_id": 0}).to_list(100)
-        if facilities_in_district:
-            query["facility"] = {"$in": [f["name"] for f in facilities_in_district]}
+        db_facilities = await db.facilities.find({"district": district}, {"name": 1, "_id": 0}).to_list(500)
+        db_names = [f["name"] for f in db_facilities]
+        hardcoded_names = FACILITIES_BY_DISTRICT.get(district, [])
+        all_fac_names = list(set(db_names + hardcoded_names))
+        if all_fac_names:
+            query["facility"] = {"$in": all_fac_names}
     elif province:
-        facilities_in_province = await db.facilities.find({"province": province}, {"name": 1, "_id": 0}).to_list(500)
-        if facilities_in_province:
-            query["facility"] = {"$in": [f["name"] for f in facilities_in_province]}
+        db_facilities = await db.facilities.find({"province": province}, {"name": 1, "_id": 0}).to_list(2000)
+        db_names = [f["name"] for f in db_facilities]
+        province_districts = DISTRICTS.get(province, [])
+        hardcoded_names = []
+        for d in province_districts:
+            hardcoded_names.extend(FACILITIES_BY_DISTRICT.get(d, []))
+        all_fac_names = list(set(db_names + hardcoded_names))
+        if all_fac_names:
+            query["facility"] = {"$in": all_fac_names}
     
     if date:
         try:
