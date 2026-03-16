@@ -695,16 +695,75 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
     facility: user?.facility || "",
     role: user?.role || "user"
   });
+  const [shiftType, setShiftType] = useState(user?.assigned_shift || "morning");
+  const [customStart, setCustomStart] = useState(user?.custom_shift_start || "");
+  const [customEnd, setCustomEnd] = useState(user?.custom_shift_end || "");
+  const [shiftConfig, setShiftConfig] = useState(null);
+  const [savingShift, setSavingShift] = useState(false);
+
+  useEffect(() => {
+    const fetchShifts = async () => {
+      try {
+        const res = await fetch(`${API}/admin/shifts`, { credentials: "include" });
+        if (res.ok) setShiftConfig(await res.json());
+      } catch (e) { console.error(e); }
+    };
+    fetchShifts();
+  }, []);
 
   if (!user) return null;
 
+  const isSuperUser = user.role === "superuser";
+
+  const handleAssignShift = async () => {
+    setSavingShift(true);
+    try {
+      const body = { shift_type: shiftType };
+      if (shiftType === "custom") {
+        body.custom_start = customStart;
+        body.custom_end = customEnd;
+      }
+      const res = await fetch(`${API}/admin/users/${user.user_id}/shift`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include"
+      });
+      if (res.ok) {
+        toast.success("Shift assigned successfully");
+      } else {
+        const e = await res.json();
+        toast.error(e.detail || "Failed to assign shift");
+      }
+    } catch {
+      toast.error("Error assigning shift");
+    } finally {
+      setSavingShift(false);
+    }
+  };
+
+  const shiftLabels = {
+    morning: shiftConfig ? `Morning (${shiftConfig.morning_start} - ${shiftConfig.morning_end})` : "Morning",
+    afternoon: shiftConfig ? `Afternoon (${shiftConfig.afternoon_start} - ${shiftConfig.afternoon_end})` : "Afternoon",
+    night: shiftConfig ? `Night (${shiftConfig.night_start} - ${shiftConfig.night_end})` : "Night",
+    four_off: shiftConfig ? `4-Off (${shiftConfig.four_off_start} - ${shiftConfig.four_off_end})` : "4-Off",
+    custom: "Custom Times"
+  };
+
   return (
     <div className="space-y-4 pt-4">
+      {isSuperUser && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-sm">
+          <Shield className="w-4 h-4 inline mr-1" />
+          Super User accounts cannot be edited by admins.
+        </div>
+      )}
       <div className="space-y-2">
         <Label>Name</Label>
         <Input
           value={formData.name}
           onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+          disabled={isSuperUser}
         />
       </div>
 
@@ -713,6 +772,7 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
         <Select 
           value={formData.position} 
           onValueChange={(v) => setFormData(prev => ({ ...prev, position: v }))}
+          disabled={isSuperUser}
         >
           <SelectTrigger>
             <SelectValue />
@@ -730,6 +790,7 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
         <Select 
           value={formData.facility} 
           onValueChange={(v) => setFormData(prev => ({ ...prev, facility: v }))}
+          disabled={isSuperUser}
         >
           <SelectTrigger>
             <SelectValue />
@@ -747,6 +808,7 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
         <Select 
           value={formData.role} 
           onValueChange={(v) => setFormData(prev => ({ ...prev, role: v }))}
+          disabled={isSuperUser}
         >
           <SelectTrigger>
             <SelectValue />
@@ -758,12 +820,56 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
         </Select>
       </div>
 
-      <Button 
-        className="w-full bg-teal-700 hover:bg-teal-800"
-        onClick={() => onSave(user.user_id, formData)}
-      >
-        Save Changes
-      </Button>
+      {!isSuperUser && (
+        <Button 
+          className="w-full bg-teal-700 hover:bg-teal-800"
+          onClick={() => onSave(user.user_id, formData)}
+          data-testid="admin-save-user-btn"
+        >
+          Save Changes
+        </Button>
+      )}
+
+      {/* Shift Assignment Section */}
+      <div className="border-t pt-4 mt-4 space-y-3">
+        <Label className="text-base font-semibold flex items-center gap-2">
+          <Clock className="w-4 h-4 text-teal-600" />
+          Assign Shift
+        </Label>
+        <p className="text-xs text-slate-500">Shift times are defined by the Super User. Select which shift this user should follow.</p>
+        <Select value={shiftType} onValueChange={setShiftType}>
+          <SelectTrigger data-testid="admin-shift-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(shiftLabels).map(([key, label]) => (
+              <SelectItem key={key} value={key}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {shiftType === "custom" && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-slate-500">Start Time</Label>
+              <Input type="time" value={customStart} onChange={(e) => setCustomStart(e.target.value)} data-testid="admin-custom-shift-start" />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500">End Time</Label>
+              <Input type="time" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} data-testid="admin-custom-shift-end" />
+            </div>
+          </div>
+        )}
+
+        <Button 
+          className="w-full bg-teal-600 hover:bg-teal-700"
+          onClick={handleAssignShift}
+          disabled={savingShift}
+          data-testid="admin-assign-shift-btn"
+        >
+          {savingShift ? "Assigning..." : "Assign Shift"}
+        </Button>
+      </div>
     </div>
   );
 };

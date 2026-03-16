@@ -206,6 +206,7 @@ class UserResponse(BaseModel):
     picture: Optional[str] = None
     role: str = "user"
     assigned_scope: Optional[dict] = None
+    assigned_shift: Optional[str] = None
     created_at: Optional[str] = None
 
 class UserUpdate(BaseModel):
@@ -218,6 +219,7 @@ class UserUpdate(BaseModel):
     area_of_allocation: Optional[str] = None
     role: Optional[str] = None
     assigned_scope: Optional[dict] = None
+    assigned_shift: Optional[str] = None
 
 class FacilityCreate(BaseModel):
     name: str
@@ -808,6 +810,18 @@ async def admin_get_users(
     user: dict = Depends(get_admin_user)
 ):
     query = {}
+    # Admins are scoped to their district; superusers see all
+    if user.get("role") == "admin":
+        admin_district = user.get("district")
+        if admin_district:
+            # Get all facilities in this district
+            hardcoded_facs = FACILITIES_BY_DISTRICT.get(admin_district, [])
+            db_facs = await db.facilities.find({"district": admin_district}, {"_id": 0, "name": 1}).to_list(500)
+            db_names = [f["name"] for f in db_facs]
+            all_facs = list(set(hardcoded_facs + db_names))
+            if all_facs:
+                query["facility"] = {"$in": all_facs}
+    
     if facility:
         query["facility"] = facility
     
@@ -818,10 +832,21 @@ async def admin_get_users(
 
 @api_router.put("/admin/users/{user_id}")
 async def admin_update_user(user_id: str, update: UserUpdate, user: dict = Depends(get_admin_user)):
+    # Admins cannot edit superusers
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") == "superuser" and user.get("role") != "superuser":
+        raise HTTPException(status_code=403, detail="Cannot edit a super user account")
+    
     update_data = {k: v for k, v in update.model_dump().items() if v is not None}
     
     if not update_data:
         raise HTTPException(status_code=400, detail="No update data provided")
+    
+    # Admins cannot assign superuser role
+    if update_data.get("role") == "superuser" and user.get("role") != "superuser":
+        raise HTTPException(status_code=403, detail="Cannot assign super user role")
     
     result = await db.users.update_one({"user_id": user_id}, {"$set": update_data})
     
@@ -830,6 +855,49 @@ async def admin_update_user(user_id: str, update: UserUpdate, user: dict = Depen
     
     updated_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
     return updated_user
+
+@api_router.put("/admin/users/{user_id}/shift")
+async def admin_assign_shift(user_id: str, request: Request, user: dict = Depends(get_admin_user)):
+    """Assign a shift to a user. Shift types are defined by the super user."""
+    body = await request.json()
+    shift_type = body.get("shift_type")  # morning, afternoon, night, four_off, custom
+    custom_start = body.get("custom_start")  # for custom shifts e.g. "07:30"
+    custom_end = body.get("custom_end")      # for custom shifts e.g. "16:00"
+    
+    valid_shifts = ["morning", "afternoon", "night", "four_off", "custom"]
+    if shift_type not in valid_shifts:
+        raise HTTPException(status_code=400, detail=f"Invalid shift type. Must be one of: {valid_shifts}")
+    
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Build shift assignment
+    shift_data = {"assigned_shift": shift_type}
+    if shift_type == "custom":
+        if not custom_start or not custom_end:
+            raise HTTPException(status_code=400, detail="Custom shift requires custom_start and custom_end times")
+        shift_data["custom_shift_start"] = custom_start
+        shift_data["custom_shift_end"] = custom_end
+    
+    await db.users.update_one({"user_id": user_id}, {"$set": shift_data})
+    updated = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
+    return updated
+
+@api_router.get("/admin/shifts")
+async def admin_get_shifts(user: dict = Depends(get_admin_user)):
+    """Get shift configuration defined by super user (read-only for admin)"""
+    config = await db.shift_config.find_one({}, {"_id": 0})
+    if not config:
+        config = {
+            "config_id": "default",
+            "morning_start": "06:00", "morning_end": "14:00",
+            "afternoon_start": "14:00", "afternoon_end": "22:00",
+            "night_start": "22:00", "night_end": "06:00",
+            "four_off_start": "07:00", "four_off_end": "19:00",
+            "grace_period_minutes": 15
+        }
+    return config
 
 @api_router.get("/admin/attendance")
 async def admin_get_attendance(
@@ -841,6 +909,17 @@ async def admin_get_attendance(
     user: dict = Depends(get_admin_user)
 ):
     query = {}
+    
+    # Admins scoped to their district
+    if user.get("role") == "admin":
+        admin_district = user.get("district")
+        if admin_district:
+            hardcoded_facs = FACILITIES_BY_DISTRICT.get(admin_district, [])
+            db_facs = await db.facilities.find({"district": admin_district}, {"_id": 0, "name": 1}).to_list(500)
+            db_names = [f["name"] for f in db_facs]
+            all_facs = list(set(hardcoded_facs + db_names))
+            if all_facs:
+                query["facility"] = {"$in": all_facs}
     
     if facility:
         query["facility"] = facility
@@ -868,9 +947,21 @@ async def admin_get_realtime_attendance(user: dict = Depends(get_admin_user)):
     """Get real-time attendance - staff currently on duty"""
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # Get all today's attendance records
+    realtime_query = {"timestamp": {"$gte": today.isoformat()}}
+    
+    # Admins scoped to their district
+    if user.get("role") == "admin":
+        admin_district = user.get("district")
+        if admin_district:
+            hardcoded_facs = FACILITIES_BY_DISTRICT.get(admin_district, [])
+            db_facs = await db.facilities.find({"district": admin_district}, {"_id": 0, "name": 1}).to_list(500)
+            db_names = [f["name"] for f in db_facs]
+            all_facs = list(set(hardcoded_facs + db_names))
+            if all_facs:
+                realtime_query["facility"] = {"$in": all_facs}
+    
     today_records = await db.attendance.find(
-        {"timestamp": {"$gte": today.isoformat()}},
+        realtime_query,
         {"_id": 0}
     ).sort("timestamp", -1).to_list(1000)
     
@@ -1355,6 +1446,14 @@ async def get_attendance_report(
     
     records = await db.attendance.find(query, {"_id": 0}).sort("timestamp", -1).to_list(10000)
     
+    # Build a map of user_id -> assigned_shift for accurate late/early calculation
+    user_ids = list({r["user_id"] for r in records})
+    users_data = await db.users.find(
+        {"user_id": {"$in": user_ids}}, 
+        {"_id": 0, "user_id": 1, "assigned_shift": 1, "custom_shift_start": 1, "custom_shift_end": 1}
+    ).to_list(len(user_ids))
+    user_shift_map = {u["user_id"]: u for u in users_data}
+    
     # Process records to add late/early status
     processed_records = []
     for record in records:
@@ -1364,15 +1463,24 @@ async def get_attendance_report(
                 dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                 time_str = dt.strftime("%H:%M")
                 
-                # Determine expected shift start
-                morning_start = shift_config.get("morning_start", "06:00")
-                afternoon_start = shift_config.get("afternoon_start", "14:00")
-                night_start = shift_config.get("night_start", "22:00")
+                # Determine expected shift start based on user's assigned shift
+                user_info = user_shift_map.get(record["user_id"], {})
+                user_shift = user_info.get("assigned_shift", "morning")
                 
-                # Simple logic: compare with morning shift for now
-                expected_time = datetime.strptime(morning_start, "%H:%M")
+                shift_start_map = {
+                    "morning": shift_config.get("morning_start", "06:00"),
+                    "afternoon": shift_config.get("afternoon_start", "14:00"),
+                    "night": shift_config.get("night_start", "22:00"),
+                    "four_off": shift_config.get("four_off_start", "07:00"),
+                    "custom": user_info.get("custom_shift_start", "06:00")
+                }
+                expected_start = shift_start_map.get(user_shift, shift_config.get("morning_start", "06:00"))
+                
+                expected_time = datetime.strptime(expected_start, "%H:%M")
                 grace_time = expected_time + timedelta(minutes=grace_minutes)
                 actual_time = datetime.strptime(time_str, "%H:%M")
+                
+                record["assigned_shift"] = user_shift
                 
                 if actual_time <= expected_time:
                     record["status"] = "early"
