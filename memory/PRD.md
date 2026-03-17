@@ -68,6 +68,26 @@ Build a mobile and web MVP application called "v-chron" for attendance tracking 
 - Late/early status calculation now uses user's assigned shift instead of defaulting to morning
 - 100% test pass rate (16/16 backend + all frontend)
 
+### Role-Based Feature Update (March 2026)
+
+**Super User:**
+- Only Super Users can create Administrator accounts
+- Can assign Admins to a specific facility, district, or province (jurisdiction)
+- Added "On Call" shift to shift configuration
+
+**Admin:**
+- Dashboard filtered to assigned jurisdiction (facility/district/province)
+- Can assign shifts (morning/afternoon/night/four_off/on_call/custom) to users
+- Lateness tracking with hours+minutes display
+- Clickable staff cards show GPS map popup with exact coordinates
+- Notification system: alerts when staff reports outside 100m radius or without GPS
+
+**User (Staff):**
+- Shift selection added after location selection in reporting workflow
+- Shifts sync dynamically with Super User config
+- Pre-assigned shifts auto-applied; otherwise user selects
+- 100% test pass rate (22/22 backend + all frontend)
+
 ## User Roles
 1. **User** - Can clock in/out, view history
 2. **Admin** - Can view all users, attendance, export reports, send backups
