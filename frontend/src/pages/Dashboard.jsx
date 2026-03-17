@@ -273,6 +273,10 @@ const Dashboard = () => {
               ? "Successfully reported for duty!" 
               : "Shift ended successfully!"
           );
+          if (action === "logout") {
+            setSelectedArea("");
+            setSelectedShift("");
+          }
           fetchStatus();
         } else {
           const error = await response.json();
@@ -296,6 +300,10 @@ const Dashboard = () => {
           status: action === "login" ? "on_duty" : "off_duty",
           last_action: { action, timestamp: new Date().toISOString() }
         });
+        if (action === "logout") {
+          setSelectedArea("");
+          setSelectedShift("");
+        }
       }
     } catch (error) {
       toast.error("An error occurred. Please try again.");
@@ -542,27 +550,39 @@ const Dashboard = () => {
         </div>
 
         {/* Your Current Location Selection */}
-        <Card className="border-slate-200 shadow-sm">
-          <CardContent className="p-4">
-            <Label className="text-slate-700 font-medium mb-2 block">Your Current Location</Label>
-            <Select value={selectedArea} onValueChange={setSelectedArea}>
-              <SelectTrigger className="h-12 border-slate-200" data-testid="current-location-select">
-                <MapPin className="w-5 h-5 text-teal-600 mr-2" />
-                <SelectValue placeholder="Select where you are reporting from" />
-              </SelectTrigger>
-              <SelectContent>
-                {areas.map((area) => (
-                  <SelectItem key={area} value={area}>
-                    {area}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
+        {!isOnDuty ? (
+          <Card className="border-slate-200 shadow-sm">
+            <CardContent className="p-4">
+              <Label className="text-slate-700 font-medium mb-2 block">Your Current Location</Label>
+              <Select value={selectedArea} onValueChange={setSelectedArea}>
+                <SelectTrigger className="h-12 border-slate-200" data-testid="current-location-select">
+                  <MapPin className="w-5 h-5 text-teal-600 mr-2" />
+                  <SelectValue placeholder="Select where you are reporting from" />
+                </SelectTrigger>
+                <SelectContent>
+                  {areas.map((area) => (
+                    <SelectItem key={area} value={area}>
+                      {area}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-teal-200 bg-teal-50/50 shadow-sm">
+            <CardContent className="p-4">
+              <Label className="text-slate-500 text-sm mb-1 block">Reporting From</Label>
+              <p className="font-medium text-teal-800 flex items-center gap-2" data-testid="locked-location">
+                <MapPin className="w-4 h-4 text-teal-600" />
+                {selectedArea || "—"}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Shift Selection - shown after location selected */}
-        {selectedArea && (
+        {/* Shift Selection - only when NOT on duty and after location selected */}
+        {!isOnDuty && selectedArea && (
           <Card className="border-slate-200 shadow-sm">
             <CardContent className="p-4">
               <Label className="text-slate-700 font-medium mb-2 block flex items-center gap-2">
@@ -596,6 +616,24 @@ const Dashboard = () => {
                   </SelectContent>
                 </Select>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Locked shift display when on duty */}
+        {isOnDuty && selectedShift && (
+          <Card className="border-teal-200 bg-teal-50/50 shadow-sm">
+            <CardContent className="p-4">
+              <Label className="text-slate-500 text-sm mb-1 block">Current Shift</Label>
+              <p className="font-medium text-teal-800 flex items-center gap-2" data-testid="locked-shift">
+                <Clock className="w-4 h-4 text-teal-600" />
+                <span className="capitalize">{selectedShift.replace("_", " ")}</span>
+                {availableShifts.find(s => s.key === selectedShift) && (
+                  <span className="text-sm text-teal-600 font-normal">
+                    ({availableShifts.find(s => s.key === selectedShift)?.start} - {availableShifts.find(s => s.key === selectedShift)?.end})
+                  </span>
+                )}
+              </p>
             </CardContent>
           </Card>
         )}
