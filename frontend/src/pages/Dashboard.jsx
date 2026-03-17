@@ -90,7 +90,7 @@ const Dashboard = () => {
         if (response.ok) {
           const data = await response.json();
           setAvailableShifts(data.shifts || []);
-          if (data.assigned_shift) {
+          if (data.assigned_shift && data.assigned_shift !== "self_select") {
             setAssignedShift(data.assigned_shift);
             setSelectedShift(data.assigned_shift);
           }

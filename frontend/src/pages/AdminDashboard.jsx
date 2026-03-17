@@ -917,6 +917,7 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
     night: shiftConfig ? `Night (${shiftConfig.night_start} - ${shiftConfig.night_end})` : "Night",
     four_off: shiftConfig ? `4-Off (${shiftConfig.four_off_start} - ${shiftConfig.four_off_end})` : "4-Off",
     on_call: shiftConfig ? `On Call (${shiftConfig.on_call_start || "00:00"} - ${shiftConfig.on_call_end || "23:59"})` : "On Call",
+    self_select: "Allow Staff to Set Own Shift",
     custom: "Custom Times"
   };
 

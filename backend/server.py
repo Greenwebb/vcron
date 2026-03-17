@@ -755,8 +755,11 @@ async def create_attendance(attendance: AttendanceCreate, user: dict = Depends(g
     # Use area from request, fallback to user's stored area
     area = attendance.area_of_allocation or user.get("area_of_allocation")
     
-    # Determine shift: use request value, fallback to pre-assigned, fallback to morning
-    shift_type = attendance.shift_type or user.get("assigned_shift") or "morning"
+    # Determine shift: use request value, fallback to pre-assigned (unless self_select), fallback to morning
+    pre_assigned = user.get("assigned_shift")
+    if pre_assigned == "self_select":
+        pre_assigned = None
+    shift_type = attendance.shift_type or pre_assigned or "morning"
     
     record = {
         "attendance_id": attendance_id,
@@ -993,7 +996,7 @@ async def admin_assign_shift(user_id: str, request: Request, user: dict = Depend
     custom_start = body.get("custom_start")  # for custom shifts e.g. "07:30"
     custom_end = body.get("custom_end")      # for custom shifts e.g. "16:00"
     
-    valid_shifts = ["morning", "afternoon", "night", "four_off", "on_call", "custom"]
+    valid_shifts = ["morning", "afternoon", "night", "four_off", "on_call", "custom", "self_select"]
     if shift_type not in valid_shifts:
         raise HTTPException(status_code=400, detail=f"Invalid shift type. Must be one of: {valid_shifts}")
     
