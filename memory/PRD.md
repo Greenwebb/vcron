@@ -61,6 +61,13 @@ Build a mobile and web MVP application called "v-chron" for attendance tracking 
 - Added "Time Late" column to CSV/Excel exports
 - 100% test pass rate (16/16 tests)
 
+### Admin Role Restrictions + Shift Assignment (March 2026)
+- Admin cannot edit or change role of superuser accounts (403 protection)
+- Admins are scoped to their own district — only see users/attendance from their district's facilities
+- Admins can assign shifts (morning/afternoon/night/four_off/custom) to users, synced with superuser-defined shift times
+- Late/early status calculation now uses user's assigned shift instead of defaulting to morning
+- 100% test pass rate (16/16 backend + all frontend)
+
 ## User Roles
 1. **User** - Can clock in/out, view history
 2. **Admin** - Can view all users, attendance, export reports, send backups
