@@ -27,7 +27,11 @@ import {
   Edit,
   Shield,
   Mail,
-  RefreshCw
+  RefreshCw,
+  Bell,
+  AlertTriangle,
+  Navigation,
+  X
 } from "lucide-react";
 import { API } from "@/App";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -56,6 +60,9 @@ const AdminDashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingUser, setEditingUser] = useState(null);
   const [sendingBackup, setSendingBackup] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notifCount, setNotifCount] = useState(0);
+  const [selectedStaffMap, setSelectedStaffMap] = useState(null);
 
   // Fetch initial data
   useEffect(() => {
@@ -140,13 +147,37 @@ const AdminDashboard = () => {
     }
   };
 
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch(`${API}/admin/notifications?limit=50`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setNotifCount(data.unread_count || 0);
+      }
+    } catch (e) { console.error("Error fetching notifications:", e); }
+  };
+
+  const markNotifRead = async (id) => {
+    await fetch(`${API}/admin/notifications/${id}/read`, { method: "PUT", credentials: "include" });
+    fetchNotifications();
+  };
+
+  const markAllRead = async () => {
+    await fetch(`${API}/admin/notifications/read-all`, { method: "PUT", credentials: "include" });
+    fetchNotifications();
+  };
+
   useEffect(() => {
     fetchRealtime();
+    fetchNotifications();
   }, []);
 
   useEffect(() => {
     if (activeTab === "users") fetchUsers();
     if (activeTab === "attendance") fetchAttendance();
+    if (activeTab === "notifications") fetchNotifications();
   }, [activeTab, facilityFilter, selectedDate, searchQuery]);
 
   // Auto-refresh realtime data
@@ -298,7 +329,7 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid grid-cols-3 w-full max-w-md">
+          <TabsList className="grid grid-cols-4 w-full max-w-lg">
             <TabsTrigger value="realtime" data-testid="tab-realtime">
               <Activity className="w-4 h-4 mr-2" />
               Real-time
@@ -310,6 +341,13 @@ const AdminDashboard = () => {
             <TabsTrigger value="attendance" data-testid="tab-attendance">
               <Clock className="w-4 h-4 mr-2" />
               Attendance
+            </TabsTrigger>
+            <TabsTrigger value="notifications" data-testid="tab-notifications" className="relative">
+              <Bell className="w-4 h-4 mr-2" />
+              Alerts
+              {notifCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">{notifCount}</span>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -415,28 +453,57 @@ const AdminDashboard = () => {
                   <ScrollArea className="h-80">
                     {realtimeData?.on_duty_staff?.length ? (
                       <div className="space-y-3">
-                        {realtimeData.on_duty_staff.map((staff) => (
-                          <div 
-                            key={staff.attendance_id}
-                            className="p-3 bg-slate-50 rounded-lg border border-slate-100"
-                          >
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <p className="font-medium text-slate-900">{staff.user_name}</p>
-                                <p className="text-sm text-slate-500">{staff.position}</p>
-                                <p className="text-sm text-slate-500">{staff.facility}</p>
-                              </div>
-                              <div className="text-right">
-                                <Badge className="bg-emerald-100 text-emerald-700 border-0">
-                                  On Duty
-                                </Badge>
-                                <p className="text-xs text-slate-500 mt-1 font-mono">
-                                  {new Date(staff.timestamp).toLocaleTimeString()}
-                                </p>
+                        {realtimeData.on_duty_staff.map((staff) => {
+                          const loginTime = new Date(staff.timestamp);
+                          const now = new Date();
+                          const diffMs = now - loginTime;
+                          const hoursOnDuty = Math.floor(diffMs / 3600000);
+                          const minsOnDuty = Math.floor((diffMs % 3600000) / 60000);
+                          
+                          return (
+                            <div 
+                              key={staff.attendance_id}
+                              className="p-3 bg-slate-50 rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors"
+                              onClick={() => {
+                                if (staff.latitude && staff.longitude) {
+                                  setSelectedStaffMap(staff);
+                                } else {
+                                  toast.info("No GPS coordinates available for this check-in");
+                                }
+                              }}
+                              data-testid={`staff-card-${staff.attendance_id}`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <p className="font-medium text-slate-900">{staff.user_name}</p>
+                                  <p className="text-sm text-slate-500">{staff.position}</p>
+                                  <p className="text-sm text-slate-500">{staff.facility}</p>
+                                  {staff.shift_type && (
+                                    <span className="text-xs text-teal-600 bg-teal-50 px-2 py-0.5 rounded mt-1 inline-block capitalize">
+                                      {staff.shift_type.replace("_", " ")} shift
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-right">
+                                  <Badge className="bg-emerald-100 text-emerald-700 border-0">
+                                    On Duty
+                                  </Badge>
+                                  <p className="text-xs text-slate-500 mt-1 font-mono">
+                                    {loginTime.toLocaleTimeString()}
+                                  </p>
+                                  <p className="text-xs text-slate-400">
+                                    {hoursOnDuty}h {minsOnDuty}m
+                                  </p>
+                                  {staff.latitude && staff.longitude && (
+                                    <div className="flex items-center gap-1 text-xs text-blue-500 mt-1">
+                                      <Navigation className="w-3 h-3" /> GPS
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="text-center py-12 text-slate-500">
@@ -448,6 +515,56 @@ const AdminDashboard = () => {
                 </CardContent>
               </Card>
             </div>
+
+            {/* GPS Map Dialog */}
+            {selectedStaffMap && (
+              <Card className="border-blue-200 shadow-lg bg-white">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                  <CardTitle className="text-base font-['Manrope'] flex items-center gap-2">
+                    <Navigation className="w-5 h-5 text-blue-600" />
+                    {selectedStaffMap.user_name} - GPS Location
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedStaffMap(null)} data-testid="close-map-btn">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-80 rounded-lg overflow-hidden map-container">
+                    <MapContainer
+                      key={`map-${selectedStaffMap.attendance_id}`}
+                      center={[selectedStaffMap.latitude, selectedStaffMap.longitude]}
+                      zoom={16}
+                      className="h-full w-full"
+                      scrollWheelZoom={true}
+                    >
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      <Marker position={[selectedStaffMap.latitude, selectedStaffMap.longitude]}>
+                        <Popup>
+                          <div className="text-sm">
+                            <p className="font-semibold">{selectedStaffMap.user_name}</p>
+                            <p>{selectedStaffMap.position}</p>
+                            <p>{selectedStaffMap.facility}</p>
+                            <p className="font-mono text-xs mt-1">
+                              {selectedStaffMap.latitude.toFixed(6)}, {selectedStaffMap.longitude.toFixed(6)}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Reported: {new Date(selectedStaffMap.timestamp).toLocaleString()}
+                            </p>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    </MapContainer>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2 text-center font-mono">
+                    {selectedStaffMap.latitude.toFixed(6)}, {selectedStaffMap.longitude.toFixed(6)} | 
+                    Reported at {new Date(selectedStaffMap.timestamp).toLocaleTimeString()}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Facility Breakdown */}
             {realtimeData?.facility_breakdown && Object.keys(realtimeData.facility_breakdown).length > 0 && (
@@ -681,6 +798,58 @@ const AdminDashboard = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Notifications Tab */}
+          <TabsContent value="notifications" className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold font-['Manrope']">
+                <Bell className="w-5 h-5 inline mr-2 text-amber-600" />
+                Notifications
+                {notifCount > 0 && <span className="text-red-500 text-sm ml-2">({notifCount} unread)</span>}
+              </h2>
+              {notifCount > 0 && (
+                <Button variant="outline" size="sm" onClick={markAllRead} data-testid="mark-all-read-btn">
+                  Mark All Read
+                </Button>
+              )}
+            </div>
+            <div className="space-y-3">
+              {notifications.length > 0 ? notifications.map((n) => (
+                <Card key={n.notification_id} className={`border shadow-sm ${n.read ? 'bg-white border-slate-200' : 'bg-amber-50 border-amber-200'}`}>
+                  <CardContent className="p-4 flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${n.type === 'outside_radius' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                        {n.type === 'outside_radius' ? (
+                          <Navigation className="w-5 h-5 text-red-600" />
+                        ) : (
+                          <AlertTriangle className="w-5 h-5 text-amber-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className={`text-sm ${n.read ? 'text-slate-600' : 'text-slate-900 font-medium'}`}>{n.message}</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {n.facility} | {new Date(n.timestamp).toLocaleString()}
+                        </p>
+                        {n.distance_meters && (
+                          <Badge className="bg-red-100 text-red-700 border-0 text-xs mt-1">{n.distance_meters}m from facility</Badge>
+                        )}
+                      </div>
+                    </div>
+                    {!n.read && (
+                      <Button variant="ghost" size="sm" onClick={() => markNotifRead(n.notification_id)} className="text-slate-400 hover:text-slate-600 flex-shrink-0" data-testid={`notif-read-${n.notification_id}`}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )) : (
+                <div className="text-center py-12 text-slate-500">
+                  <Bell className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                  <p>No notifications</p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
         </Tabs>
       </main>
     </div>
@@ -747,6 +916,7 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
     afternoon: shiftConfig ? `Afternoon (${shiftConfig.afternoon_start} - ${shiftConfig.afternoon_end})` : "Afternoon",
     night: shiftConfig ? `Night (${shiftConfig.night_start} - ${shiftConfig.night_end})` : "Night",
     four_off: shiftConfig ? `4-Off (${shiftConfig.four_off_start} - ${shiftConfig.four_off_end})` : "4-Off",
+    on_call: shiftConfig ? `On Call (${shiftConfig.on_call_start || "00:00"} - ${shiftConfig.on_call_end || "23:59"})` : "On Call",
     custom: "Custom Times"
   };
 
@@ -805,19 +975,11 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
 
       <div className="space-y-2">
         <Label>Role</Label>
-        <Select 
-          value={formData.role} 
-          onValueChange={(v) => setFormData(prev => ({ ...prev, role: v }))}
-          disabled={isSuperUser}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="user">User</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="text-sm text-slate-500 bg-slate-100 p-2 rounded flex items-center gap-2">
+          <Shield className="w-4 h-4 text-slate-400" />
+          <span className="capitalize">{formData.role}</span>
+          <span className="text-xs text-slate-400">(Only Super Users can change roles)</span>
+        </div>
       </div>
 
       {!isSuperUser && (

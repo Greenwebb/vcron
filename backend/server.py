@@ -17,6 +17,7 @@ import httpx
 import resend
 from io import BytesIO
 import openpyxl
+import math
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -240,6 +241,8 @@ class ShiftConfig(BaseModel):
     night_end: str = "06:00"
     four_off_start: str = "07:00"
     four_off_end: str = "19:00"
+    on_call_start: str = "00:00"
+    on_call_end: str = "23:59"
     grace_period_minutes: int = 15
 
 class PasswordReset(BaseModel):
@@ -256,6 +259,7 @@ class AttendanceRecord(BaseModel):
     timestamp: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    shift_type: Optional[str] = None
     synced: bool = True
 
 class AttendanceCreate(BaseModel):
@@ -263,6 +267,7 @@ class AttendanceCreate(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     area_of_allocation: Optional[str] = None  # Facility or Outreach
+    shift_type: Optional[str] = None  # morning, afternoon, night, four_off, on_call, custom
     offline_id: Optional[str] = None  # For offline sync
 
 class OfflineAttendanceSync(BaseModel):
@@ -298,6 +303,56 @@ def decode_jwt_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Calculate distance in meters between two GPS coordinates"""
+    R = 6371000  # Earth radius in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+async def get_admin_scope_query(user):
+    """Build a facility-based query filter based on admin's assigned jurisdiction"""
+    if user.get("role") == "superuser":
+        return {}
+    
+    jurisdiction = user.get("assigned_jurisdiction")
+    if not jurisdiction:
+        # Fallback to user's own district
+        admin_district = user.get("district")
+        if admin_district:
+            hardcoded_facs = FACILITIES_BY_DISTRICT.get(admin_district, [])
+            db_facs = await db.facilities.find({"district": admin_district}, {"_id": 0, "name": 1}).to_list(500)
+            db_names = [f["name"] for f in db_facs]
+            return {"facility": {"$in": list(set(hardcoded_facs + db_names))}}
+        return {}
+    
+    scope_type = jurisdiction.get("type")
+    scope_value = jurisdiction.get("value")
+    
+    if scope_type == "facility":
+        return {"facility": scope_value}
+    elif scope_type == "district":
+        hardcoded_facs = FACILITIES_BY_DISTRICT.get(scope_value, [])
+        db_facs = await db.facilities.find({"district": scope_value}, {"_id": 0, "name": 1}).to_list(500)
+        db_names = [f["name"] for f in db_facs]
+        all_facs = list(set(hardcoded_facs + db_names))
+        if all_facs:
+            return {"facility": {"$in": all_facs}}
+    elif scope_type == "province":
+        province_districts = DISTRICTS.get(scope_value, [])
+        all_facs = []
+        for d in province_districts:
+            all_facs.extend(FACILITIES_BY_DISTRICT.get(d, []))
+        db_facs = await db.facilities.find({"province": scope_value}, {"_id": 0, "name": 1}).to_list(2000)
+        all_facs.extend([f["name"] for f in db_facs])
+        all_facs = list(set(all_facs))
+        if all_facs:
+            return {"facility": {"$in": all_facs}}
+    return {}
 
 async def get_current_user(request: Request) -> dict:
     # Check cookie first
@@ -700,6 +755,9 @@ async def create_attendance(attendance: AttendanceCreate, user: dict = Depends(g
     # Use area from request, fallback to user's stored area
     area = attendance.area_of_allocation or user.get("area_of_allocation")
     
+    # Determine shift: use request value, fallback to pre-assigned, fallback to morning
+    shift_type = attendance.shift_type or user.get("assigned_shift") or "morning"
+    
     record = {
         "attendance_id": attendance_id,
         "user_id": user["user_id"],
@@ -711,13 +769,64 @@ async def create_attendance(attendance: AttendanceCreate, user: dict = Depends(g
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "latitude": attendance.latitude,
         "longitude": attendance.longitude,
+        "shift_type": shift_type,
         "synced": True,
         "offline_id": attendance.offline_id
     }
     
     await db.attendance.insert_one(record)
     
+    # Generate notifications for login actions
+    if attendance.action == "login":
+        await _check_attendance_notifications(user, record, area)
+    
     return AttendanceRecord(**{k: v for k, v in record.items() if k != "offline_id"})
+
+async def _check_attendance_notifications(user, record, area):
+    """Check GPS distance and generate admin notifications"""
+    try:
+        facility_name = user["facility"]
+        facility_doc = await db.facilities.find_one({"name": facility_name}, {"_id": 0})
+        
+        # Check 1: No GPS coordinates
+        if not record.get("latitude") or not record.get("longitude"):
+            if area != "Outreach":
+                await db.notifications.insert_one({
+                    "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                    "type": "no_gps",
+                    "user_id": user["user_id"],
+                    "user_name": user["name"],
+                    "facility": facility_name,
+                    "message": f"{user['name']} reported for duty without GPS coordinates",
+                    "timestamp": record["timestamp"],
+                    "read": False,
+                    "attendance_id": record["attendance_id"]
+                })
+            return
+        
+        # Check 2: Distance from facility (only if facility has coordinates and not outreach)
+        if area != "Outreach" and facility_doc and facility_doc.get("latitude") and facility_doc.get("longitude"):
+            distance = haversine_distance(
+                record["latitude"], record["longitude"],
+                facility_doc["latitude"], facility_doc["longitude"]
+            )
+            if distance > 100:  # More than 100 meters
+                await db.notifications.insert_one({
+                    "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                    "type": "outside_radius",
+                    "user_id": user["user_id"],
+                    "user_name": user["name"],
+                    "facility": facility_name,
+                    "message": f"{user['name']} reported {int(distance)}m away from {facility_name}",
+                    "distance_meters": int(distance),
+                    "latitude": record["latitude"],
+                    "longitude": record["longitude"],
+                    "timestamp": record["timestamp"],
+                    "read": False,
+                    "attendance_id": record["attendance_id"]
+                })
+    except Exception as e:
+        logger.error(f"Notification check error: {e}")
 
 @api_router.post("/attendance/sync")
 async def sync_offline_attendance(sync_data: OfflineAttendanceSync, user: dict = Depends(get_current_user)):
@@ -800,6 +909,35 @@ async def get_attendance_status(user: dict = Depends(get_current_user)):
     else:
         return {"status": "off_duty", "last_action": last_record}
 
+@api_router.get("/shifts/available")
+async def get_available_shifts(user: dict = Depends(get_current_user)):
+    """Get available shifts for user to select when reporting for duty"""
+    config = await db.shift_config.find_one({}, {"_id": 0})
+    if not config:
+        config = {
+            "morning_start": "06:00", "morning_end": "14:00",
+            "afternoon_start": "14:00", "afternoon_end": "22:00",
+            "night_start": "22:00", "night_end": "06:00",
+            "four_off_start": "07:00", "four_off_end": "19:00",
+            "on_call_start": "00:00", "on_call_end": "23:59",
+            "grace_period_minutes": 15
+        }
+    
+    shifts = [
+        {"key": "morning", "label": "Morning", "start": config.get("morning_start", "06:00"), "end": config.get("morning_end", "14:00")},
+        {"key": "afternoon", "label": "Afternoon", "start": config.get("afternoon_start", "14:00"), "end": config.get("afternoon_end", "22:00")},
+        {"key": "night", "label": "Night", "start": config.get("night_start", "22:00"), "end": config.get("night_end", "06:00")},
+        {"key": "four_off", "label": "4-Off", "start": config.get("four_off_start", "07:00"), "end": config.get("four_off_end", "19:00")},
+        {"key": "on_call", "label": "On Call", "start": config.get("on_call_start", "00:00"), "end": config.get("on_call_end", "23:59")},
+    ]
+    
+    return {
+        "shifts": shifts,
+        "assigned_shift": user.get("assigned_shift"),
+        "custom_shift_start": user.get("custom_shift_start"),
+        "custom_shift_end": user.get("custom_shift_end")
+    }
+
 # ===================== ADMIN ROUTES =====================
 
 @api_router.get("/admin/users")
@@ -809,18 +947,7 @@ async def admin_get_users(
     facility: Optional[str] = None,
     user: dict = Depends(get_admin_user)
 ):
-    query = {}
-    # Admins are scoped to their district; superusers see all
-    if user.get("role") == "admin":
-        admin_district = user.get("district")
-        if admin_district:
-            # Get all facilities in this district
-            hardcoded_facs = FACILITIES_BY_DISTRICT.get(admin_district, [])
-            db_facs = await db.facilities.find({"district": admin_district}, {"_id": 0, "name": 1}).to_list(500)
-            db_names = [f["name"] for f in db_facs]
-            all_facs = list(set(hardcoded_facs + db_names))
-            if all_facs:
-                query["facility"] = {"$in": all_facs}
+    query = await get_admin_scope_query(user)
     
     if facility:
         query["facility"] = facility
@@ -844,9 +971,11 @@ async def admin_update_user(user_id: str, update: UserUpdate, user: dict = Depen
     if not update_data:
         raise HTTPException(status_code=400, detail="No update data provided")
     
-    # Admins cannot assign superuser role
+    # Admins cannot assign superuser role or admin role (only superuser can create admins)
     if update_data.get("role") == "superuser" and user.get("role") != "superuser":
         raise HTTPException(status_code=403, detail="Cannot assign super user role")
+    if update_data.get("role") == "admin" and user.get("role") != "superuser":
+        raise HTTPException(status_code=403, detail="Only super users can create administrator accounts")
     
     result = await db.users.update_one({"user_id": user_id}, {"$set": update_data})
     
@@ -864,7 +993,7 @@ async def admin_assign_shift(user_id: str, request: Request, user: dict = Depend
     custom_start = body.get("custom_start")  # for custom shifts e.g. "07:30"
     custom_end = body.get("custom_end")      # for custom shifts e.g. "16:00"
     
-    valid_shifts = ["morning", "afternoon", "night", "four_off", "custom"]
+    valid_shifts = ["morning", "afternoon", "night", "four_off", "on_call", "custom"]
     if shift_type not in valid_shifts:
         raise HTTPException(status_code=400, detail=f"Invalid shift type. Must be one of: {valid_shifts}")
     
@@ -895,9 +1024,43 @@ async def admin_get_shifts(user: dict = Depends(get_admin_user)):
             "afternoon_start": "14:00", "afternoon_end": "22:00",
             "night_start": "22:00", "night_end": "06:00",
             "four_off_start": "07:00", "four_off_end": "19:00",
+            "on_call_start": "00:00", "on_call_end": "23:59",
             "grace_period_minutes": 15
         }
     return config
+
+@api_router.get("/admin/notifications")
+async def admin_get_notifications(
+    unread_only: bool = False,
+    skip: int = 0,
+    limit: int = 50,
+    user: dict = Depends(get_admin_user)
+):
+    """Get notifications for admin's area of responsibility"""
+    query = {}
+    scope = await get_admin_scope_query(user)
+    if scope.get("facility"):
+        query["facility"] = scope["facility"]
+    if unread_only:
+        query["read"] = False
+    
+    notifications = await db.notifications.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
+    unread_count = await db.notifications.count_documents({**({k: v for k, v in query.items() if k != "read"}), "read": False})
+    return {"notifications": notifications, "unread_count": unread_count}
+
+@api_router.put("/admin/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, user: dict = Depends(get_admin_user)):
+    await db.notifications.update_one({"notification_id": notification_id}, {"$set": {"read": True}})
+    return {"message": "Marked as read"}
+
+@api_router.put("/admin/notifications/read-all")
+async def mark_all_notifications_read(user: dict = Depends(get_admin_user)):
+    scope = await get_admin_scope_query(user)
+    query = {}
+    if scope.get("facility"):
+        query["facility"] = scope["facility"]
+    await db.notifications.update_many(query, {"$set": {"read": True}})
+    return {"message": "All notifications marked as read"}
 
 @api_router.get("/admin/attendance")
 async def admin_get_attendance(
@@ -908,18 +1071,7 @@ async def admin_get_attendance(
     user_name: Optional[str] = None,
     user: dict = Depends(get_admin_user)
 ):
-    query = {}
-    
-    # Admins scoped to their district
-    if user.get("role") == "admin":
-        admin_district = user.get("district")
-        if admin_district:
-            hardcoded_facs = FACILITIES_BY_DISTRICT.get(admin_district, [])
-            db_facs = await db.facilities.find({"district": admin_district}, {"_id": 0, "name": 1}).to_list(500)
-            db_names = [f["name"] for f in db_facs]
-            all_facs = list(set(hardcoded_facs + db_names))
-            if all_facs:
-                query["facility"] = {"$in": all_facs}
+    query = await get_admin_scope_query(user)
     
     if facility:
         query["facility"] = facility
@@ -949,16 +1101,8 @@ async def admin_get_realtime_attendance(user: dict = Depends(get_admin_user)):
     
     realtime_query = {"timestamp": {"$gte": today.isoformat()}}
     
-    # Admins scoped to their district
-    if user.get("role") == "admin":
-        admin_district = user.get("district")
-        if admin_district:
-            hardcoded_facs = FACILITIES_BY_DISTRICT.get(admin_district, [])
-            db_facs = await db.facilities.find({"district": admin_district}, {"_id": 0, "name": 1}).to_list(500)
-            db_names = [f["name"] for f in db_facs]
-            all_facs = list(set(hardcoded_facs + db_names))
-            if all_facs:
-                realtime_query["facility"] = {"$in": all_facs}
+    scope_query = await get_admin_scope_query(user)
+    realtime_query.update(scope_query)
     
     today_records = await db.attendance.find(
         realtime_query,
@@ -1204,6 +1348,28 @@ async def promote_to_superuser(request: Request, user: dict = Depends(get_superu
     await db.users.update_one({"email": email}, {"$set": {"role": "superuser"}})
     return {"message": f"User {email} promoted to superuser"}
 
+@api_router.put("/superuser/users/{user_id}/jurisdiction")
+async def assign_jurisdiction(user_id: str, request: Request, user: dict = Depends(get_superuser)):
+    """Assign an admin to a specific facility, district, or province"""
+    body = await request.json()
+    scope_type = body.get("type")  # "facility", "district", "province"
+    scope_value = body.get("value")
+    
+    if scope_type not in ["facility", "district", "province"]:
+        raise HTTPException(status_code=400, detail="Type must be 'facility', 'district', or 'province'")
+    if not scope_value:
+        raise HTTPException(status_code=400, detail="Value is required")
+    
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.users.update_one({"user_id": user_id}, {"$set": {
+        "assigned_jurisdiction": {"type": scope_type, "value": scope_value}
+    }})
+    updated = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
+    return updated
+
 @api_router.get("/superuser/users")
 async def superuser_get_users(
     skip: int = 0,
@@ -1367,6 +1533,8 @@ async def get_shift_config(user: dict = Depends(get_superuser)):
             "night_end": "06:00",
             "four_off_start": "07:00",
             "four_off_end": "19:00",
+            "on_call_start": "00:00",
+            "on_call_end": "23:59",
             "grace_period_minutes": 15
         }
         await db.shift_config.insert_one(config)
@@ -1472,6 +1640,7 @@ async def get_attendance_report(
                     "afternoon": shift_config.get("afternoon_start", "14:00"),
                     "night": shift_config.get("night_start", "22:00"),
                     "four_off": shift_config.get("four_off_start", "07:00"),
+                    "on_call": shift_config.get("on_call_start", "00:00"),
                     "custom": user_info.get("custom_shift_start", "06:00")
                 }
                 expected_start = shift_start_map.get(user_shift, shift_config.get("morning_start", "06:00"))

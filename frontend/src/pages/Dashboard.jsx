@@ -45,6 +45,9 @@ const Dashboard = () => {
   const [pendingSync, setPendingSync] = useState(0);
   const [areas, setAreas] = useState([]);
   const [selectedArea, setSelectedArea] = useState("");
+  const [availableShifts, setAvailableShifts] = useState([]);
+  const [selectedShift, setSelectedShift] = useState("");
+  const [assignedShift, setAssignedShift] = useState(null);
 
   // Check online status
   useEffect(() => {
@@ -77,6 +80,26 @@ const Dashboard = () => {
       }
     };
     fetchAreas();
+  }, []);
+
+  // Fetch available shifts
+  useEffect(() => {
+    const fetchShifts = async () => {
+      try {
+        const response = await fetch(`${API}/shifts/available`, { credentials: "include" });
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableShifts(data.shifts || []);
+          if (data.assigned_shift) {
+            setAssignedShift(data.assigned_shift);
+            setSelectedShift(data.assigned_shift);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching shifts:", error);
+      }
+    };
+    fetchShifts();
   }, []);
 
   // Always fetch fresh user data from API
@@ -210,6 +233,10 @@ const Dashboard = () => {
       toast.error("Please select your current location first");
       return;
     }
+    if (action === "login" && !selectedShift) {
+      toast.error("Please select the shift you are reporting for");
+      return;
+    }
 
     setActionLoading(true);
 
@@ -228,6 +255,7 @@ const Dashboard = () => {
         latitude: coords?.latitude || null,
         longitude: coords?.longitude || null,
         area_of_allocation: selectedArea,
+        shift_type: action === "login" ? selectedShift : undefined,
         offline_id: `offline_${Date.now()}`
       };
 
@@ -533,13 +561,52 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Shift Selection - shown after location selected */}
+        {selectedArea && (
+          <Card className="border-slate-200 shadow-sm">
+            <CardContent className="p-4">
+              <Label className="text-slate-700 font-medium mb-2 block flex items-center gap-2">
+                <Clock className="w-4 h-4 text-teal-600" />
+                Shift
+                {assignedShift && (
+                  <Badge className="bg-teal-100 text-teal-700 text-xs border-0 ml-1">Pre-assigned</Badge>
+                )}
+              </Label>
+              {assignedShift ? (
+                <div className="text-sm text-slate-600 bg-teal-50 p-3 rounded-lg" data-testid="assigned-shift-display">
+                  Your shift has been assigned: <span className="font-semibold text-teal-700 capitalize">{assignedShift.replace("_", " ")}</span>
+                  {availableShifts.find(s => s.key === assignedShift) && (
+                    <span className="text-slate-500 ml-1">
+                      ({availableShifts.find(s => s.key === assignedShift)?.start} - {availableShifts.find(s => s.key === assignedShift)?.end})
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <Select value={selectedShift} onValueChange={setSelectedShift}>
+                  <SelectTrigger className="h-12 border-slate-200" data-testid="shift-select">
+                    <Clock className="w-5 h-5 text-teal-600 mr-2" />
+                    <SelectValue placeholder="Select your shift" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableShifts.map((shift) => (
+                      <SelectItem key={shift.key} value={shift.key}>
+                        {shift.label} ({shift.start} - {shift.end})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Action Buttons */}
         <div className="grid grid-cols-1 gap-4">
           {/* Report for Duty Button */}
           <button
             onClick={() => handleAttendance("login")}
-            disabled={actionLoading || isOnDuty || !selectedArea}
-            className={`action-button-login h-32 md:h-40 flex flex-col items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${isOnDuty || !selectedArea ? 'opacity-50' : ''}`}
+            disabled={actionLoading || isOnDuty || !selectedArea || !selectedShift}
+            className={`action-button-login h-32 md:h-40 flex flex-col items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${isOnDuty || !selectedArea || !selectedShift ? 'opacity-50' : ''}`}
             data-testid="report-duty-btn"
           >
             {actionLoading ? (

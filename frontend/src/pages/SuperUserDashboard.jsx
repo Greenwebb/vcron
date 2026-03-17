@@ -502,6 +502,7 @@ const ShiftsTab = () => {
     { label: "Afternoon Shift", startKey: "afternoon_start", endKey: "afternoon_end", color: "text-orange-400" },
     { label: "Night Shift", startKey: "night_start", endKey: "night_end", color: "text-indigo-400" },
     { label: "4-Off Shift", startKey: "four_off_start", endKey: "four_off_end", color: "text-cyan-400" },
+    { label: "On Call", startKey: "on_call_start", endKey: "on_call_end", color: "text-emerald-400" },
   ];
 
   return (
@@ -851,9 +852,30 @@ const StatusBadge = ({ status, minutesLate, lateDisplay }) => {
   return <span className="text-slate-600 text-sm">-</span>;
 };
 
-// Dialog: Change Role
+// Dialog: Change Role + Jurisdiction Assignment
 const RoleChangeDialog = ({ user, onRoleChange }) => {
   const [role, setRole] = useState(user.role);
+  const [jurisdictionType, setJurisdictionType] = useState(user.assigned_jurisdiction?.type || "district");
+  const [jurisdictionValue, setJurisdictionValue] = useState(user.assigned_jurisdiction?.value || "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      onRoleChange(user.user_id, role);
+      // If admin, also assign jurisdiction
+      if (role === "admin" && jurisdictionValue) {
+        await fetch(`${API}/superuser/users/${user.user_id}/jurisdiction`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: jurisdictionType, value: jurisdictionValue }),
+          credentials: "include"
+        });
+        toast.success("Jurisdiction assigned");
+      }
+    } finally { setSaving(false); }
+  };
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -877,13 +899,42 @@ const RoleChangeDialog = ({ user, onRoleChange }) => {
               <SelectItem value="superuser">Super User</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Jurisdiction assignment for admins */}
+          {role === "admin" && (
+            <div className="space-y-3 border-t border-slate-800 pt-3">
+              <Label className="text-slate-400 text-sm">Assign Jurisdiction</Label>
+              <Select value={jurisdictionType} onValueChange={setJurisdictionType}>
+                <SelectTrigger className="bg-slate-800 border-slate-700" data-testid={`su-juris-type-${user.user_id}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="facility">Facility</SelectItem>
+                  <SelectItem value="district">District</SelectItem>
+                  <SelectItem value="province">Province</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder={`Enter ${jurisdictionType} name...`}
+                value={jurisdictionValue}
+                onChange={(e) => setJurisdictionValue(e.target.value)}
+                className="bg-slate-800 border-slate-700 text-white"
+                data-testid={`su-juris-value-${user.user_id}`}
+              />
+              {user.assigned_jurisdiction && (
+                <p className="text-xs text-slate-500">
+                  Current: {user.assigned_jurisdiction.type} → {user.assigned_jurisdiction.value}
+                </p>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline" className="border-slate-700 text-slate-300">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button onClick={() => onRoleChange(user.user_id, role)} className="bg-amber-600 hover:bg-amber-700" data-testid={`su-role-save-${user.user_id}`}>Save</Button>
+            <Button onClick={handleSave} disabled={saving} className="bg-amber-600 hover:bg-amber-700" data-testid={`su-role-save-${user.user_id}`}>{saving ? "Saving..." : "Save"}</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>
