@@ -266,18 +266,38 @@ export default function AppLayout() {
 
   // Load user from auth/me — restore session
   useEffect(() => {
-    authFetch(`${API}/auth/me`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.user) {
-          setUser(data.user)
-          setRole(data.user.role?.toLowerCase())
-          setPageReady(true)
-        } else {
-          navigate('/app/login', { replace: true })
+    let cancelled = false
+
+    const restoreSession = async () => {
+      try {
+        const response = await authFetch(`${API}/auth/me`)
+        if (!response.ok) {
+          clearStoredToken()
+          if (!cancelled) navigate('/app/login', { replace: true })
+          return
         }
-      })
-      .catch(() => navigate('/app/login', { replace: true }))
+
+        const data = await response.json()
+        const resolvedUser = data?.user ?? data
+
+        if (!resolvedUser?.user_id) {
+          clearStoredToken()
+          if (!cancelled) navigate('/app/login', { replace: true })
+          return
+        }
+
+        if (cancelled) return
+        setUser(resolvedUser)
+        setRole(resolvedUser.role?.toLowerCase())
+        setPageReady(true)
+      } catch {
+        clearStoredToken()
+        if (!cancelled) navigate('/app/login', { replace: true })
+      }
+    }
+
+    restoreSession()
+    return () => { cancelled = true }
   }, [navigate])
 
   // Reset page-ready on route change (show skeleton briefly for smooth transitions)

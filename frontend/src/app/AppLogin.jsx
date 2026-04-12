@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { API, setStoredToken } from '../lib/api'
+import { API, authFetch, clearStoredToken, setStoredToken } from '../lib/api'
 
 // ─── OTP Input ────────────────────────────────────────────────────────────────
 function OtpInput({ value, onChange }) {
@@ -57,8 +57,24 @@ export default function AppLogin() {
 
   // Redirect if already logged in
   useEffect(() => {
-    const token = localStorage.getItem('vchron_token')
-    if (token) navigate('/app/dashboard', { replace: true })
+    let cancelled = false
+
+    const restoreSession = async () => {
+      try {
+        const response = await authFetch(`${API}/auth/me`)
+        if (!response.ok) {
+          clearStoredToken()
+          return
+        }
+
+        if (!cancelled) navigate('/app/dashboard', { replace: true })
+      } catch {
+        clearStoredToken()
+      }
+    }
+
+    restoreSession()
+    return () => { cancelled = true }
   }, [navigate])
 
   // Resend cooldown timer
