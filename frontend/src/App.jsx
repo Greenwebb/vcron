@@ -83,10 +83,10 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 p-8">
-          <div className="max-w-md w-full bg-slate-800 rounded-xl shadow-lg p-8 text-center">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-8">
+          <div className="max-w-md w-full bg-white border border-slate-200 rounded-xl shadow-lg p-8 text-center">
             <h1 className="text-2xl font-bold text-red-400 mb-4">Something went wrong</h1>
-            <p className="text-slate-400 mb-6 text-sm">{this.state.error?.message || "An unexpected error occurred."}</p>
+            <p className="text-slate-600 mb-6 text-sm">{this.state.error?.message || "An unexpected error occurred."}</p>
             <button onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/app/login'; }}
               className="bg-teal-700 text-white px-6 py-2 rounded-lg hover:bg-teal-600 transition-colors">
               Go to Login

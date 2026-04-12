@@ -134,7 +134,7 @@ const StaffLogin = () => {
 
             {/* Staff badge */}
             <div className="flex justify-center mb-3">
-              <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-medium px-3 py-1.5 rounded-full">
+              <div className="flex items-center gap-2 bg-amber-100 border border-amber-200 text-amber-800 text-xs font-medium px-3 py-1.5 rounded-full">
                 <ShieldAlert className="w-3.5 h-3.5" />
                 Staff Access Only
               </div>

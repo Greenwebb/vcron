@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,9 +31,24 @@ import {
   Bell,
   AlertTriangle,
   Navigation,
-  X
+  X,
+  Trash2,
+  Network,
+  ChevronDown,
+  ChevronRight,
+  User2,
+  Phone,
+  CalendarDays,
+  ExternalLink,
+  CheckCircle2,
+  BarChart3,
+  ClipboardList,
+  Hospital,
+  Truck,
+  Presentation
 } from "lucide-react";
-import { API } from "@/App";
+import { API, authFetch } from "@/lib/api";
+import Logo from "@/components/Logo";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -63,14 +78,31 @@ const AdminDashboard = () => {
   const [notifications, setNotifications] = useState([]);
   const [notifCount, setNotifCount] = useState(0);
   const [selectedStaffMap, setSelectedStaffMap] = useState(null);
+  const [taskModal, setTaskModal] = useState({ open: false, loading: false, data: null, attendanceId: null });
+
+  // Fetch tasks for a given attendance record
+  const fetchTasks = useCallback(async (attendanceId) => {
+    setTaskModal({ open: true, loading: true, data: null, attendanceId });
+    try {
+      const res = await authFetch(`${API}/admin/tasks/${attendanceId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTaskModal({ open: true, loading: false, data, attendanceId });
+      } else {
+        setTaskModal({ open: true, loading: false, data: { has_tasks: false, tasks: [] }, attendanceId });
+      }
+    } catch {
+      setTaskModal({ open: true, loading: false, data: { has_tasks: false, tasks: [] }, attendanceId });
+    }
+  }, []);
 
   // Fetch initial data
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [facilitiesRes, positionsRes] = await Promise.all([
-          fetch(`${API}/facilities`),
-          fetch(`${API}/positions`)
+          authFetch(`${API}/facilities`),
+          authFetch(`${API}/positions`)
         ]);
         
         const facilitiesData = await facilitiesRes.json();
@@ -87,10 +119,9 @@ const AdminDashboard = () => {
   }, []);
 
   // Fetch realtime data
-  const fetchRealtime = async () => {
+  const fetchRealtime = useCallback(async () => {
     try {
-      const response = await fetch(`${API}/admin/attendance/realtime`, {
-        credentials: "include"
+      const response = await authFetch(`${API}/admin/attendance/realtime`, {
       });
       
       if (response.ok) {
@@ -105,16 +136,16 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate]);
 
   // Fetch users
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (facilityFilter !== "all") params.append("facility", facilityFilter);
       
-      const response = await fetch(`${API}/admin/users?${params}`, {
-        credentials: "include"
+      const response = await authFetch(`${API}/admin/users?${params}`, {
       });
       
       if (response.ok) {
@@ -124,61 +155,60 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error("Error fetching users:", error);
     }
-  };
+  }, [facilityFilter]);
 
   // Fetch attendance
-  const fetchAttendance = async () => {
+  const fetchAttendance = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (facilityFilter !== "all") params.append("facility", facilityFilter);
       if (selectedDate) params.append("date", selectedDate.toISOString());
       if (searchQuery) params.append("user_name", searchQuery);
       
-      const response = await fetch(`${API}/admin/attendance?${params}`, {
-        credentials: "include"
+      const response = await authFetch(`${API}/admin/attendance?${params}`, {
       });
       
       if (response.ok) {
         const data = await response.json();
-        setAttendance(data.records || []);
+        setAttendance(data.attendance || data.records || []);
       }
     } catch (error) {
       console.error("Error fetching attendance:", error);
     }
-  };
+  }, [facilityFilter, selectedDate, searchQuery]);
 
   // Fetch notifications
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/admin/notifications?limit=50`, { credentials: "include" });
+      const res = await authFetch(`${API}/admin/notifications?limit=50`, { });
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications || []);
         setNotifCount(data.unread_count || 0);
       }
     } catch (e) { console.error("Error fetching notifications:", e); }
-  };
+  }, []);
 
   const markNotifRead = async (id) => {
-    await fetch(`${API}/admin/notifications/${id}/read`, { method: "PUT", credentials: "include" });
+    await authFetch(`${API}/admin/notifications/${id}/read`, { method: "PUT" });
     fetchNotifications();
   };
 
   const markAllRead = async () => {
-    await fetch(`${API}/admin/notifications/read-all`, { method: "PUT", credentials: "include" });
+    await authFetch(`${API}/admin/notifications/read-all`, { method: "PUT" });
     fetchNotifications();
   };
 
   useEffect(() => {
     fetchRealtime();
     fetchNotifications();
-  }, []);
+  }, [fetchRealtime, fetchNotifications]);
 
   useEffect(() => {
     if (activeTab === "users") fetchUsers();
     if (activeTab === "attendance") fetchAttendance();
     if (activeTab === "notifications") fetchNotifications();
-  }, [activeTab, facilityFilter, selectedDate, searchQuery]);
+  }, [activeTab, facilityFilter, selectedDate, searchQuery, fetchUsers, fetchAttendance, fetchNotifications]);
 
   // Auto-refresh realtime data
   useEffect(() => {
@@ -186,16 +216,15 @@ const AdminDashboard = () => {
       const interval = setInterval(fetchRealtime, 30000);
       return () => clearInterval(interval);
     }
-  }, [activeTab]);
+  }, [activeTab, fetchRealtime]);
 
   // Update user
   const handleUpdateUser = async (userId, updates) => {
     try {
-      const response = await fetch(`${API}/admin/users/${userId}`, {
+      const response = await authFetch(`${API}/admin/users/${userId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-        credentials: "include"
+        body: JSON.stringify(updates)
       });
 
       if (response.ok) {
@@ -219,8 +248,7 @@ const AdminDashboard = () => {
       if (selectedDate) params.append("date", selectedDate.toISOString());
       params.append("format", format);
 
-      const response = await fetch(`${API}/admin/export?${params}`, {
-        credentials: "include"
+      const response = await authFetch(`${API}/admin/export?${params}`, {
       });
 
       if (response.ok) {
@@ -247,9 +275,8 @@ const AdminDashboard = () => {
       const params = new URLSearchParams();
       if (selectedDate) params.append("date", selectedDate.toISOString());
 
-      const response = await fetch(`${API}/admin/send-backup?${params}`, {
-        method: "POST",
-        credentials: "include"
+      const response = await authFetch(`${API}/admin/send-backup?${params}`, {
+        method: "POST"
       });
 
       if (response.ok) {
@@ -301,17 +328,21 @@ const AdminDashboard = () => {
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center">
-                <Shield className="w-6 h-6 text-teal-600" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-slate-900 font-['Manrope']">Admin Dashboard</h1>
-                <p className="text-xs text-slate-500">V-Chron Management</p>
-              </div>
+              <Logo variant="dark" size="sm" />
+              <Badge variant="outline" className="text-teal-700 border-teal-200 bg-teal-50">Admin</Badge>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/deletion-requests')}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              <span className="hidden sm:inline">Deletion Requests</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -329,25 +360,33 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid grid-cols-4 w-full max-w-lg">
+          <TabsList className="grid grid-cols-6 w-full max-w-3xl">
             <TabsTrigger value="realtime" data-testid="tab-realtime">
               <Activity className="w-4 h-4 mr-2" />
-              Real-time
+              <span className="hidden sm:inline">Real-time</span>
             </TabsTrigger>
             <TabsTrigger value="users" data-testid="tab-users">
               <Users className="w-4 h-4 mr-2" />
-              Users
+              <span className="hidden sm:inline">Users</span>
             </TabsTrigger>
             <TabsTrigger value="attendance" data-testid="tab-attendance">
               <Clock className="w-4 h-4 mr-2" />
-              Attendance
+              <span className="hidden sm:inline">Attendance</span>
+            </TabsTrigger>
+            <TabsTrigger value="reports" data-testid="tab-reports">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Reports</span>
             </TabsTrigger>
             <TabsTrigger value="notifications" data-testid="tab-notifications" className="relative">
               <Bell className="w-4 h-4 mr-2" />
-              Alerts
+              <span className="hidden sm:inline">Alerts</span>
               {notifCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">{notifCount}</span>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="org-tree" data-testid="tab-org-tree">
+              <Network className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Org Tree</span>
             </TabsTrigger>
           </TabsList>
 
@@ -483,16 +522,29 @@ const AdminDashboard = () => {
                                       {staff.shift_type.replace("_", " ")} shift
                                     </span>
                                   )}
+                                  {/* Lateness badge */}
+                                  {staff.late_display && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <span className="text-xs font-mono font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                                        Late: {staff.late_display}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="text-right">
-                                  <Badge className="bg-emerald-100 text-emerald-700 border-0">
-                                    On Duty
-                                  </Badge>
+                                  {/* Status badge */}
+                                  {staff.status === 'late' ? (
+                                    <Badge className="bg-red-100 text-red-700 border-0">Late</Badge>
+                                  ) : staff.status === 'on_time' ? (
+                                    <Badge className="bg-emerald-100 text-emerald-700 border-0">On Time</Badge>
+                                  ) : (
+                                    <Badge className="bg-emerald-100 text-emerald-700 border-0">On Duty</Badge>
+                                  )}
                                   <p className="text-xs text-slate-500 mt-1 font-mono">
                                     {loginTime.toLocaleTimeString()}
                                   </p>
                                   <p className="text-xs text-slate-400">
-                                    {hoursOnDuty}h {minsOnDuty}m
+                                    {hoursOnDuty}h {minsOnDuty}m on duty
                                   </p>
                                   {staff.latitude && staff.longitude && (
                                     <div className="flex items-center gap-1 text-xs text-blue-500 mt-1">
@@ -587,6 +639,9 @@ const AdminDashboard = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Location Type Breakdown */}
+            <AdminLocationBreakdown locationBreakdown={realtimeData?.location_breakdown} />
           </TabsContent>
 
           {/* Users Tab */}
@@ -750,6 +805,7 @@ const AdminDashboard = () => {
                       <TableHead>Action</TableHead>
                       <TableHead>Time</TableHead>
                       <TableHead>GPS Coordinates</TableHead>
+                      <TableHead>Tasks</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -784,11 +840,24 @@ const AdminDashboard = () => {
                               : "-"
                             }
                           </TableCell>
+                          <TableCell>
+                            {record.action === "logout" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-teal-700 border-teal-200 hover:bg-teal-50 text-xs h-7 px-2"
+                                onClick={() => fetchTasks(record.attendance_id)}
+                              >
+                                <ClipboardList className="w-3 h-3 mr-1" />
+                                View Tasks
+                              </Button>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12 text-slate-500">
+                        <TableCell colSpan={8} className="text-center py-12 text-slate-500">
                           No attendance records found
                         </TableCell>
                       </TableRow>
@@ -850,8 +919,615 @@ const AdminDashboard = () => {
               )}
             </div>
           </TabsContent>
+
+          {/* Reports Tab */}
+          <TabsContent value="reports" className="space-y-6">
+            <AdminReportsTab />
+          </TabsContent>
+
+          {/* Org Tree Tab */}
+          <TabsContent value="org-tree" className="space-y-6">
+            <OrgTreeAdminTab />
+          </TabsContent>
         </Tabs>
       </main>
+
+      {/* Task View Modal */}
+      <AdminTaskModal taskModal={taskModal} setTaskModal={setTaskModal} />
+    </div>
+  );
+};
+
+// ============ LOCATION TYPE BREAKDOWN COMPONENT ============
+const LOCATION_CONFIG = {
+  'Facility': { color: 'teal', bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-700', badge: 'bg-teal-100 text-teal-700', Icon: Hospital },
+  'Outreach': { color: 'blue', bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-700', Icon: Truck },
+  'Workshop or Meeting': { color: 'amber', bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700', Icon: Presentation },
+};
+
+const AdminLocationBreakdown = ({ locationBreakdown }) => {
+  const [expandedType, setExpandedType] = useState(null);
+  if (!locationBreakdown) return null;
+  const hasAny = Object.values(locationBreakdown).some(v => v.count > 0);
+
+  return (
+    <Card className="border-slate-200 shadow-sm">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg font-['Manrope'] flex items-center gap-2">
+          <Activity className="w-5 h-5 text-teal-600" />
+          Live Location Breakdown
+          {!hasAny && <span className="text-sm font-normal text-slate-400 ml-2">— no staff currently on duty</span>}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Summary count cards */}
+        <div className="grid grid-cols-3 gap-3">
+          {Object.entries(locationBreakdown).map(([lt, data]) => {
+            const cfg = LOCATION_CONFIG[lt] || LOCATION_CONFIG['Facility'];
+            return (
+              <button
+                key={lt}
+                onClick={() => setExpandedType(expandedType === lt ? null : lt)}
+                className={`p-4 rounded-xl border ${cfg.bg} ${cfg.border} text-left transition-all hover:shadow-md ${expandedType === lt ? 'ring-2 ring-offset-1 ring-teal-400' : ''}`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  {cfg.Icon && <cfg.Icon className={`w-5 h-5 ${cfg.text}`} />}
+                  <Badge className={`${cfg.badge} border-0 text-xs`}>{data.count} on duty</Badge>
+                </div>
+                <p className={`text-2xl font-bold font-['Manrope'] ${cfg.text}`}>{data.count}</p>
+                <p className={`text-xs ${cfg.text} font-medium mt-0.5`}>{lt}</p>
+                {data.count > 0 && (
+                  <p className="text-xs text-slate-400 mt-1">{expandedType === lt ? 'Click to collapse ▲' : 'Click to see staff ▼'}</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Expanded staff list */}
+        {expandedType && locationBreakdown[expandedType]?.staff?.length > 0 && (
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className={`px-4 py-2 ${LOCATION_CONFIG[expandedType]?.bg || 'bg-slate-50'} border-b border-slate-200`}>
+              <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                {LOCATION_CONFIG[expandedType]?.Icon && React.createElement(LOCATION_CONFIG[expandedType].Icon, { className: `w-4 h-4 ${LOCATION_CONFIG[expandedType]?.text}` })}
+                {expandedType} — {locationBreakdown[expandedType].count} staff currently on duty
+              </p>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {locationBreakdown[expandedType].staff.map((s, i) => {
+                const loginTime = new Date(s.timestamp);
+                const now = new Date();
+                const diffMs = now - loginTime;
+                const h = Math.floor(diffMs / 3600000);
+                const m = Math.floor((diffMs % 3600000) / 60000);
+                return (
+                  <div key={i} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{s.user_name}</p>
+                      <p className="text-xs text-slate-500">{s.position} · {s.facility}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500 font-mono">{loginTime.toLocaleTimeString()}</p>
+                      <p className="text-xs text-slate-400">{h > 0 ? `${h}h ` : ''}{m}m on duty</p>
+                      {s.status === 'late' && <Badge className="bg-red-100 text-red-700 border-0 text-xs">Late</Badge>}
+                      {s.status === 'on_time' && <Badge className="bg-emerald-100 text-emerald-700 border-0 text-xs">On Time</Badge>}
+                      {s.status === 'early' && <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">Early</Badge>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+// ============ ADMIN REPORTS TAB ============
+const AdminReportsTab = () => {
+  const [stats, setStats] = useState(null);
+  const [report, setReport] = useState(null);
+  const [date, setDate] = useState(""); // empty = no date filter, show all records
+  const [facilityFilter, setFacilityFilter] = useState("");
+  const [facilities, setFacilities] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Fetch stats and facilities on mount
+  useEffect(() => {
+    authFetch(`${API}/admin/stats`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setStats(d); });
+    authFetch(`${API}/data/facilities`)
+      .then(r => r.ok ? r.json() : { facilities: [] })
+      .then(d => setFacilities(d.facilities || []));
+  }, []);
+
+  const fetchReport = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (date) params.append("date", new Date(date).toISOString());
+      if (facilityFilter) params.append("facility", facilityFilter);
+      const res = await authFetch(`${API}/admin/attendance-report?${params}`);
+      if (res.ok) setReport(await res.json());
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, [date, facilityFilter]);
+
+  useEffect(() => { fetchReport(); }, [fetchReport]);
+
+  // Admin attendance-report returns { attendance: [...] }
+  const allRecords = report?.attendance || report?.records || [];
+  const filteredRecords = allRecords.filter(r => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return r.user_name?.toLowerCase().includes(q) || r.facility?.toLowerCase().includes(q) || r.position?.toLowerCase().includes(q);
+  });
+
+  // Summary counts from the loaded records
+  const reportSummary = {
+    late: allRecords.filter(r => r.status === 'late').length,
+    on_time: allRecords.filter(r => r.status === 'on_time').length,
+    early: allRecords.filter(r => r.status === 'early').length,
+  };
+
+  const statCards = [
+    { label: "Today's Logins", value: stats?.today_logins ?? 0, icon: Activity, color: "text-teal-600", bg: "bg-teal-50" },
+    { label: "Currently On Duty", value: stats?.currently_on_duty ?? 0, icon: Clock, color: "text-green-600", bg: "bg-green-50" },
+    { label: "Late Today", value: stats?.today_late ?? 0, icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50" },
+    { label: "On Time Today", value: stats?.today_on_time ?? 0, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "Early Today", value: stats?.today_early ?? 0, icon: CalendarDays, color: "text-sky-600", bg: "bg-sky-50" },
+    { label: "Total Records (All Time)", value: stats?.total_attendance ?? 0, icon: BarChart3, color: "text-purple-600", bg: "bg-purple-50" },
+  ];
+
+  return (
+    <div className="space-y-6" data-testid="admin-reports">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {statCards.map((c) => (
+          <Card key={c.label} className="border-slate-200 shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">{c.label}</p>
+                  <p className={`text-3xl font-bold font-['Manrope'] ${c.color}`}>{c.value}</p>
+                </div>
+                <div className={`w-12 h-12 ${c.bg} rounded-xl flex items-center justify-center`}>
+                  <c.icon className={`w-6 h-6 ${c.color}`} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Report summary from loaded records */}
+      {allRecords.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+            <div>
+              <p className="text-xs text-red-500">Late (in view)</p>
+              <p className="text-xl font-bold text-red-600">{reportSummary.late}</p>
+            </div>
+          </div>
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+            <div>
+              <p className="text-xs text-emerald-500">On Time (in view)</p>
+              <p className="text-xl font-bold text-emerald-600">{reportSummary.on_time}</p>
+            </div>
+          </div>
+          <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 flex items-center gap-3">
+            <CalendarDays className="w-5 h-5 text-sky-500 shrink-0" />
+            <div>
+              <p className="text-xs text-sky-500">Early (in view)</p>
+              <p className="text-xl font-bold text-sky-600">{reportSummary.early}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <Label className="text-xs text-slate-500 mb-1 block">Date</Label>
+              <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-40" data-testid="admin-report-date" />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500 mb-1 block">Facility</Label>
+              <Select value={facilityFilter || "_none"} onValueChange={v => setFacilityFilter(v === "_none" ? "" : v)}>
+                <SelectTrigger className="w-48" data-testid="admin-report-facility">
+                  <SelectValue placeholder="All Facilities" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">All Facilities</SelectItem>
+                  {facilities.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-48">
+              <Label className="text-xs text-slate-500 mb-1 block">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input placeholder="Name, facility..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9" data-testid="admin-report-search" />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Records Table */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-['Manrope'] flex items-center gap-2">
+            <Activity className="w-4 h-4 text-teal-600" />
+            Attendance Records
+            {report && <Badge variant="outline" className="ml-2 text-xs">{filteredRecords.length} records</Badge>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : filteredRecords.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <Activity className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+              <p>No attendance records found</p>
+            </div>
+          ) : (
+            <ScrollArea className="h-[500px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Facility</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Shift</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRecords.map(r => (
+                    <TableRow key={r.attendance_id}>
+                      <TableCell className="font-medium">{r.user_name}</TableCell>
+                      <TableCell className="text-slate-500 text-sm">{r.position}</TableCell>
+                      <TableCell className="text-slate-500 text-sm">{r.facility}</TableCell>
+                      <TableCell>
+                        <Badge className={r.action === 'login' ? 'bg-teal-100 text-teal-700 border-0' : 'bg-slate-100 text-slate-600 border-0'}>
+                          {r.action === 'login' ? 'Clock In' : 'Clock Out'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">{new Date(r.timestamp).toLocaleTimeString()}</TableCell>
+                      <TableCell className="text-sm capitalize">{r.shift_type?.replace('_', ' ') || '-'}</TableCell>
+                      <TableCell>
+                        {r.status === 'late' ? (
+                          <Badge className="bg-red-100 text-red-700 border-0 text-xs">Late {r.late_display ? `(${r.late_display})` : ''}</Badge>
+                        ) : r.status === 'on_time' ? (
+                          <Badge className="bg-emerald-100 text-emerald-700 border-0 text-xs">On Time</Badge>
+                        ) : r.status === 'early' ? (
+                          <Badge className="bg-sky-100 text-sky-700 border-0 text-xs">Early</Badge>
+                        ) : <span className="text-slate-400 text-xs">-</span>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// ============ ORG TREE (ADMIN SCOPED VIEW) ============
+const OrgTreeAdminTab = () => {
+  const [tree, setTree] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState({});
+  const [search, setSearch] = useState("");
+  const [selectedUser, setSelectedUser] = useState(null);
+
+  useEffect(() => {
+    authFetch(`${API}/admin/org-tree`)
+      .then(r => r.ok ? r.json() : { tree: [] })
+      .then(d => { setTree(d.tree || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const toggle = (key) => setExpanded(p => ({ ...p, [key]: !p[key] }));
+  const totalUsers = tree.reduce((s, p) => s + (p.user_count || 0), 0);
+
+  // Flatten all users for search
+  const allUsers = tree.flatMap(p =>
+    (p.districts || []).flatMap(d =>
+      (d.org_units || []).flatMap(u =>
+        (u.users || []).map(usr => ({
+          ...usr,
+          province: p.name,
+          district: d.name,
+          facility: u.name,
+        }))
+      )
+    )
+  );
+
+  const q = search.toLowerCase().trim();
+  const searchResults = q.length > 1
+    ? allUsers.filter(u =>
+        u.name?.toLowerCase().includes(q) ||
+        u.position?.toLowerCase().includes(q) ||
+        u.facility?.toLowerCase().includes(q) ||
+        u.district?.toLowerCase().includes(q)
+      )
+    : [];
+
+  // Auto-expand nodes that contain search matches
+  useEffect(() => {
+    if (q.length > 1) {
+      const newExp = {};
+      tree.forEach(p => {
+        (p.districts || []).forEach(d => {
+          (d.org_units || []).forEach(u => {
+            const hasMatch = (u.users || []).some(usr =>
+              usr.name?.toLowerCase().includes(q) ||
+              usr.position?.toLowerCase().includes(q)
+            );
+            if (hasMatch) {
+              newExp[`prov-${p.id}`] = true;
+              newExp[`dist-${d.id}`] = true;
+              newExp[`unit-${u.id}`] = true;
+            }
+          });
+        });
+      });
+      setExpanded(prev => ({ ...prev, ...newExp }));
+    }
+  }, [q, tree]);
+
+  if (loading) return <div className="text-center py-12 text-slate-500">Loading organisation tree...</div>;
+
+  if (tree.length === 0) return (
+    <Card className="border-slate-200 shadow-sm">
+      <CardContent className="py-12 text-center text-slate-400">
+        <Network className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+        <p>No organisation data within your assigned scope.</p>
+        <p className="text-sm mt-1">Contact your super user to assign your jurisdiction.</p>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Header + Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Your Organisation Scope</h2>
+          <p className="text-sm text-slate-500">{totalUsers} staff across {tree.length} province{tree.length !== 1 ? "s" : ""} in your jurisdiction</p>
+        </div>
+        <div className="relative sm:ml-auto w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search staff or roles…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Search Results */}
+      {q.length > 1 && (
+        <Card className="border-teal-200 bg-teal-50/40">
+          <CardHeader className="pb-2 pt-3">
+            <CardTitle className="text-sm text-teal-700">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""} for "{search}"</CardTitle>
+          </CardHeader>
+          <CardContent className="pb-3">
+            {searchResults.length === 0 ? (
+              <p className="text-sm text-slate-400">No staff or roles match your search.</p>
+            ) : (
+              <div className="space-y-1">
+                {searchResults.map(u => (
+                  <button
+                    key={u.user_id}
+                    onClick={() => setSelectedUser(u)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-teal-100 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {u.name?.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{u.name}</p>
+                        <p className="text-xs text-slate-500">{u.position} · {u.facility}</p>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tree */}
+      <div className="space-y-2">
+        {tree.map((prov) => (
+          <Card key={prov.id} className="border-slate-200 shadow-sm">
+            <button
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+              onClick={() => toggle(`prov-${prov.id}`)}
+            >
+              <div className="flex items-center gap-3">
+                {expanded[`prov-${prov.id}`] ? <ChevronDown className="w-4 h-4 text-teal-600" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                <span className="font-semibold text-slate-800">{prov.name}</span>
+                <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{prov.districts?.length || 0} districts</span>
+              </div>
+              <span className="text-sm text-slate-500 flex items-center gap-1">
+                <User2 className="w-3.5 h-3.5" />{prov.user_count} staff
+              </span>
+            </button>
+
+            {expanded[`prov-${prov.id}`] && (
+              <div className="border-t border-slate-100">
+                {(prov.districts || []).map((dist) => (
+                  <div key={dist.id}>
+                    <button
+                      className="w-full flex items-center justify-between px-8 py-2.5 hover:bg-slate-50 transition-colors"
+                      onClick={() => toggle(`dist-${dist.id}`)}
+                    >
+                      <div className="flex items-center gap-3">
+                        {expanded[`dist-${dist.id}`] ? <ChevronDown className="w-3.5 h-3.5 text-teal-500" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-300" />}
+                        <span className="text-slate-700 text-sm">{dist.name}</span>
+                        <span className="text-xs text-slate-400">{dist.org_units?.length || 0} facilities</span>
+                      </div>
+                      <span className="text-xs text-slate-500 flex items-center gap-1">
+                        <User2 className="w-3 h-3" />{dist.user_count}
+                      </span>
+                    </button>
+
+                    {expanded[`dist-${dist.id}`] && (
+                      <div className="border-t border-slate-50">
+                        {(dist.org_units || []).length === 0 ? (
+                          <p className="px-16 py-2 text-xs text-slate-400">No facilities</p>
+                        ) : (dist.org_units || []).map((unit) => (
+                          <div key={unit.id}>
+                            <button
+                              className="w-full flex items-center justify-between px-14 py-2 hover:bg-slate-50 transition-colors"
+                              onClick={() => toggle(`unit-${unit.id}`)}
+                            >
+                              <div className="flex items-center gap-3">
+                                {expanded[`unit-${unit.id}`] ? <ChevronDown className="w-3 h-3 text-teal-500" /> : <ChevronRight className="w-3 h-3 text-slate-300" />}
+                                <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="text-slate-600 text-sm">{unit.name}</span>
+                              </div>
+                              <span className="text-xs text-slate-500 flex items-center gap-1">
+                                <User2 className="w-3 h-3" />{unit.users?.length || 0}
+                              </span>
+                            </button>
+
+                            {expanded[`unit-${unit.id}`] && (
+                              <div className="px-20 py-1 space-y-1 border-t border-slate-50">
+                                {(unit.users || []).length === 0 ? (
+                                  <p className="text-xs text-slate-400 py-1">No staff assigned</p>
+                                ) : (unit.users || []).map((u) => (
+                                  <button
+                                    key={u.user_id}
+                                    onClick={() => setSelectedUser({ ...u, facility: unit.name, district: dist.name, province: prov.name })}
+                                    className="w-full flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-teal-50 transition-colors text-left group"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                        {u.name?.charAt(0).toUpperCase()}
+                                      </div>
+                                      <span className="text-sm text-slate-700">{u.name}</span>
+                                      <span className="text-xs text-slate-400">{u.position}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-slate-400 capitalize">{u.assigned_shift?.replace("_", " ") || "—"}</span>
+                                      <ExternalLink className="w-3 h-3 text-slate-300 group-hover:text-teal-500" />
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      {/* Staff Profile Panel */}
+      {selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30" onClick={() => setSelectedUser(null)}>
+          <div
+            className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-6 space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-teal-600 flex items-center justify-center text-white text-lg font-bold">
+                  {selectedUser.name?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900 text-base">{selectedUser.name}</h3>
+                  <p className="text-sm text-teal-600">{selectedUser.position}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedUser(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Details */}
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-slate-50 rounded-lg p-3">
+                <p className="text-xs text-slate-400 mb-0.5">Facility</p>
+                <p className="font-medium text-slate-800">{selectedUser.facility || "—"}</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-3">
+                <p className="text-xs text-slate-400 mb-0.5">District</p>
+                <p className="font-medium text-slate-800">{selectedUser.district || "—"}</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-3">
+                <p className="text-xs text-slate-400 mb-0.5">Province</p>
+                <p className="font-medium text-slate-800">{selectedUser.province || "—"}</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-3">
+                <p className="text-xs text-slate-400 mb-0.5">Shift</p>
+                <p className="font-medium text-slate-800 capitalize">{selectedUser.assigned_shift?.replace("_", " ") || "—"}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              {selectedUser.phone && (
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Phone className="w-4 h-4 text-slate-400" />
+                  <span>{selectedUser.phone}</span>
+                </div>
+              )}
+              {selectedUser.email && (
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Mail className="w-4 h-4 text-slate-400" />
+                  <span>{selectedUser.email}</span>
+                </div>
+              )}
+              {selectedUser.created_at && (
+                <div className="flex items-center gap-2 text-slate-600">
+                  <CalendarDays className="w-4 h-4 text-slate-400" />
+                  <span>Joined {new Date(selectedUser.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-xs text-slate-400 text-center">Employee ID: {selectedUser.user_id}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -873,7 +1549,7 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
   useEffect(() => {
     const fetchShifts = async () => {
       try {
-        const res = await fetch(`${API}/admin/shifts`, { credentials: "include" });
+        const res = await authFetch(`${API}/admin/shifts`, { });
         if (res.ok) setShiftConfig(await res.json());
       } catch (e) { console.error(e); }
     };
@@ -892,11 +1568,10 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
         body.custom_start = customStart;
         body.custom_end = customEnd;
       }
-      const res = await fetch(`${API}/admin/users/${user.user_id}/shift`, {
+      const res = await authFetch(`${API}/admin/users/${user.user_id}/shift`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        credentials: "include"
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         toast.success("Shift assigned successfully");
@@ -1036,5 +1711,51 @@ const EditUserForm = ({ user, positions, facilities, onSave }) => {
     </div>
   );
 };
+
+// ─── Task View Modal ─────────────────────────────────────────────────────────
+function AdminTaskModal({ taskModal, setTaskModal }) {
+  return (
+    <Dialog open={taskModal.open} onOpenChange={(open) => setTaskModal((prev) => ({ ...prev, open }))}>
+      <DialogContent className="max-w-md w-full">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-slate-800">
+            <ClipboardList className="w-5 h-5 text-teal-600" />
+            Tasks Completed During Shift
+          </DialogTitle>
+          {taskModal.data?.user_name && (
+            <p className="text-sm text-slate-500">
+              {taskModal.data.user_name} &mdash; {taskModal.data.facility}
+            </p>
+          )}
+          {taskModal.data?.submitted_at && (
+            <p className="text-xs text-slate-400">
+              Submitted: {new Date(taskModal.data.submitted_at).toLocaleString()}
+            </p>
+          )}
+        </DialogHeader>
+
+        {taskModal.loading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : taskModal.data?.has_tasks ? (
+          <div className="mt-2 space-y-2 max-h-72 overflow-y-auto pr-1">
+            {(Array.isArray(taskModal.data.tasks) ? taskModal.data.tasks : []).map((task, i) => (
+              <div key={i} className="flex items-start gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                <span className="text-teal-600 font-mono text-xs mt-0.5 shrink-0">{task.order || i + 1}.</span>
+                <span className="text-sm text-slate-700 flex-1 break-words">{task.text || task}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-slate-400">
+            <ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">No tasks were submitted for this shift.</p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default AdminDashboard;
