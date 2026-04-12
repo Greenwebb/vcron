@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { API } from '../lib/api'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { API, authFetch, clearStoredToken, setStoredToken } from '../lib/api'
 import PrivacyPolicy from './PrivacyPolicy'
 import TermsAndConditions from './TermsAndConditions'
 
@@ -177,7 +177,11 @@ function OtpInput({ value, onChange }) {
 
 export default function Register() {
   const navigate = useNavigate()
-  const [step, setStep] = useState(1)
+  const location = useLocation()
+  const isAppAuth = useMemo(() => location.pathname.startsWith('/app/'), [location.pathname])
+  const loginRoute = isAppAuth ? '/app/login' : '/login'
+  const dashboardRoute = isAppAuth ? '/app/dashboard' : '/dashboard'
+  const [step, setStep] = useState(() => location.state?.step || 1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -188,7 +192,7 @@ export default function Register() {
 
   // Step 2 state
   const [otp, setOtp] = useState('')
-  const [setupToken, setSetupToken] = useState('')
+  const [setupToken, setSetupToken] = useState(() => location.state?.token || '')
   const [resendCooldown, setResendCooldown] = useState(0)
 
   // Step 3 state
@@ -209,6 +213,31 @@ export default function Register() {
 
   const ministryObj = ministries.find((m) => m.id === selectedMinistry)
   const unitTerm = ministryObj?.unit_term || 'Facility'
+
+  useEffect(() => {
+    let cancelled = false
+
+    const checkSession = async () => {
+      try {
+        const res = await authFetch(`${API}/auth/me`)
+        if (!res.ok) {
+          clearStoredToken()
+          return
+        }
+
+        const data = await res.json()
+        const user = data?.user ?? data
+        if (!cancelled && user?.user_id && user?.setup_complete) {
+          navigate(dashboardRoute, { replace: true })
+        }
+      } catch {
+        clearStoredToken()
+      }
+    }
+
+    checkSession()
+    return () => { cancelled = true }
+  }, [dashboardRoute, navigate])
 
   useEffect(() => {
     if (step !== 3) return
@@ -293,7 +322,7 @@ export default function Register() {
       const data = await res.json()
       if (!res.ok) { setError(data.detail || 'Verification failed'); return }
       setSetupToken(data.setup_token)
-      localStorage.setItem('vchron_token', data.setup_token)
+      setStoredToken(data.setup_token)
       setStep(3)
     } catch { setError('Network error. Please try again.') }
     finally { setLoading(false) }
@@ -333,8 +362,8 @@ export default function Register() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.detail || 'Setup failed'); return }
-      localStorage.setItem('vchron_token', data.access_token)
-      navigate('/dashboard')
+      setStoredToken(data.access_token)
+      navigate(dashboardRoute)
     } catch { setError('Network error. Please try again.') }
     finally { setLoading(false) }
   }
@@ -506,7 +535,7 @@ export default function Register() {
 
           <p className="text-center text-sm text-slate-500 mt-6">
             Already have an account?{' '}
-            <Link to="/login" className="text-teal-600 hover:text-teal-700 font-medium">Sign in</Link>
+            <Link to={loginRoute} className="text-teal-600 hover:text-teal-700 font-medium">Sign in</Link>
           </p>
         </div>
 

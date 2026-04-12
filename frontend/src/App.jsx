@@ -23,9 +23,6 @@ const SuperUserDashboard = lazy(() => import("@/pages/SuperUserDashboard"));
 
 // ─── PWA /app shell and pages (all lazy) ─────────────────────────────────────
 const AppLayout = lazy(() => import("@/app/AppLayout"));
-const AppLogin = lazy(() => import("@/app/AppLogin"));
-const AppStaffLogin = lazy(() => import("@/app/AppStaffLogin"));
-const AppRegister = lazy(() => import("@/app/AppRegister"));
 const OfflinePage = lazy(() => import("@/app/OfflinePage"));
 
 // /app/* pages re-use the existing page components (wrapped in AppLayout)
@@ -193,9 +190,9 @@ function AppRouter() {
 
         {/* ── PWA /app routes ── */}
         {/* Auth pages (no shell) */}
-        <Route path="/app/login" element={<Suspense fallback={<PageLoader />}><AppLogin /></Suspense>} />
-        <Route path="/app/staff-login" element={<Suspense fallback={<PageLoader />}><AppStaffLogin /></Suspense>} />
-        <Route path="/app/register" element={<Suspense fallback={<PageLoader />}><AppRegister /></Suspense>} />
+        <Route path="/app/login" element={<Login />} />
+        <Route path="/app/staff-login" element={<StaffLogin />} />
+        <Route path="/app/register" element={<Register />} />
         <Route path="/app/offline" element={<Suspense fallback={<PageLoader />}><OfflinePage /></Suspense>} />
 
         {/* App shell (with bottom nav + header) */}
