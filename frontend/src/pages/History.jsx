@@ -12,7 +12,7 @@ import {
   MapPin,
   Calendar
 } from "lucide-react";
-import { API } from "@/App";
+import { API, authFetch } from "@/lib/api";
 
 const History = () => {
   const navigate = useNavigate();
@@ -23,7 +23,7 @@ const History = () => {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const response = await fetch(`${API}/attendance/me?limit=100`, {
+        const response = await authFetch(`${API}/attendance/me?limit=100`, {
           credentials: "include"
         });
         

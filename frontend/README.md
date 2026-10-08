@@ -68,3 +68,25 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+# Frontend deployment
+
+In Vercel, set the project Root Directory to `frontend` and use Node.js 22.
+The checked-in `vercel.json` installs dependencies with `npm ci`, runs
+`npm run build`, publishes `build`, and serves React routes through `index.html`.
+The backend is hosted separately.
+
+Set `REACT_APP_BACKEND_URL` to the backend origin (for example,
+`https://api.vcron.cloud`), without `/api`. The frontend adds `/api` itself.
+If unset, it uses `https://api.vcron.cloud`.
+
+To verify locally with Node.js 22:
+
+```sh
+npm ci
+CI=true npm run build
+```
+
+The original Privacy Policy and Terms & Conditions source files were absent
+from the repository and its history. Their pages currently show an availability
+notice; replace that notice with approved documents before publishing.

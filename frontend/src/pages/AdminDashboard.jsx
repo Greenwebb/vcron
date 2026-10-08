@@ -741,7 +741,7 @@ const AdminDashboard = () => {
                       mode="single"
                       selected={selectedDate}
                       onSelect={setSelectedDate}
-                      initialFocus
+                      autoFocus
                     />
                   </PopoverContent>
                 </Popover>

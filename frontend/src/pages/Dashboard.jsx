@@ -23,7 +23,7 @@ import {
   Phone,
   Shield
 } from "lucide-react";
-import { API } from "@/App";
+import { API, authFetch, clearStoredToken } from "@/lib/api";
 import localforage from "localforage";
 
 // Initialize localforage for offline storage
@@ -49,28 +49,11 @@ const Dashboard = () => {
   const [selectedShift, setSelectedShift] = useState("");
   const [assignedShift, setAssignedShift] = useState(null);
 
-  // Check online status
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      syncOfflineRecords();
-    };
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
   // Fetch areas of allocation
   useEffect(() => {
     const fetchAreas = async () => {
       try {
-        const response = await fetch(`${API}/areas`);
+        const response = await authFetch(`${API}/areas`);
         if (response.ok) {
           const data = await response.json();
           setAreas(data.areas || []);
@@ -86,7 +69,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchShifts = async () => {
       try {
-        const response = await fetch(`${API}/shifts/available`, { credentials: "include" });
+        const response = await authFetch(`${API}/shifts/available`, { credentials: "include" });
         if (response.ok) {
           const data = await response.json();
           setAvailableShifts(data.shifts || []);
@@ -106,7 +89,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch(`${API}/auth/me`, {
+        const response = await authFetch(`${API}/auth/me`, {
           credentials: "include"
         });
         
@@ -137,7 +120,7 @@ const Dashboard = () => {
     if (!isOnline) return;
     
     try {
-      const response = await fetch(`${API}/attendance/status`, {
+      const response = await authFetch(`${API}/attendance/status`, {
         credentials: "include"
       });
       
@@ -194,13 +177,13 @@ const Dashboard = () => {
   }, []);
 
   // Sync offline records
-  const syncOfflineRecords = async () => {
+  const syncOfflineRecords = useCallback(async () => {
     try {
       const offlineRecords = await offlineStore.getItem("pendingRecords") || [];
       
       if (offlineRecords.length === 0) return;
 
-      const response = await fetch(`${API}/attendance/sync`, {
+      const response = await authFetch(`${API}/attendance/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ records: offlineRecords }),
@@ -216,7 +199,24 @@ const Dashboard = () => {
     } catch (error) {
       console.error("Sync error:", error);
     }
-  };
+  }, [fetchStatus]);
+
+  // Check online status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineRecords();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [syncOfflineRecords]);
 
   // Check pending sync count
   useEffect(() => {
@@ -260,7 +260,7 @@ const Dashboard = () => {
       };
 
       if (isOnline) {
-        const response = await fetch(`${API}/attendance`, {
+        const response = await authFetch(`${API}/attendance`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(record),
@@ -315,14 +315,14 @@ const Dashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await fetch(`${API}/auth/logout`, {
+      await authFetch(`${API}/auth/logout`, {
         method: "POST",
         credentials: "include"
       });
     } catch (error) {
       console.error("Logout error:", error);
     }
-    localStorage.removeItem("vchron_token");
+    clearStoredToken();
     navigate("/login");
   };
 

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Clock, Building2, Briefcase, MapPin, Phone } from "lucide-react";
-import { API } from "@/App";
+import { API, authFetch } from "@/lib/api";
 
 const CompleteRegistration = () => {
   const navigate = useNavigate();
@@ -32,7 +32,7 @@ const CompleteRegistration = () => {
     const checkAndFetch = async () => {
       if (!user) {
         try {
-          const response = await fetch(`${API}/auth/me`, {
+          const response = await authFetch(`${API}/auth/me`, {
             credentials: "include"
           });
           if (!response.ok) {
@@ -48,8 +48,8 @@ const CompleteRegistration = () => {
       // Fetch provinces and positions
       try {
         const [provincesRes, positionsRes] = await Promise.all([
-          fetch(`${API}/provinces`),
-          fetch(`${API}/positions`)
+          authFetch(`${API}/provinces`),
+          authFetch(`${API}/positions`)
         ]);
         
         const provincesData = await provincesRes.json();
@@ -75,7 +75,7 @@ const CompleteRegistration = () => {
 
     const fetchDistricts = async () => {
       try {
-        const response = await fetch(`${API}/districts/${encodeURIComponent(formData.province)}`);
+        const response = await authFetch(`${API}/districts/${encodeURIComponent(formData.province)}`);
         const data = await response.json();
         setDistricts(data.districts || []);
         setFormData(prev => ({ ...prev, district: "", facility: "" }));
@@ -97,7 +97,7 @@ const CompleteRegistration = () => {
 
     const fetchFacilities = async () => {
       try {
-        const response = await fetch(`${API}/facilities/${encodeURIComponent(formData.district)}`);
+        const response = await authFetch(`${API}/facilities/${encodeURIComponent(formData.district)}`);
         const data = await response.json();
         setFacilities(data.facilities || []);
         setFormData(prev => ({ ...prev, facility: "" }));
@@ -128,7 +128,7 @@ const CompleteRegistration = () => {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API}/auth/complete-registration`, {
+      const response = await authFetch(`${API}/auth/complete-registration`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
