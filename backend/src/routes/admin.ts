@@ -1,0 +1,631 @@
+import { FastifyInstance } from 'fastify'
+import ExcelJS from 'exceljs'
+import prisma from '../lib/prisma'
+import { requireAdmin } from '../plugins/authenticate'
+import { getAdminScopeWhere } from '../lib/adminScope'
+import { auditLog, AUDIT_ACTIONS, actorFromRequest } from '../lib/audit'
+
+// Format a duration in total SECONDS to hh:mm:ss
+function formatDuration(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  const s = totalSeconds % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+// Legacy minutes-only formatter (kept for export compat)
+function formatLateDisplay(totalMinutes: number): string {
+  return formatDuration(totalMinutes * 60)
+}
+
+// Parse a HH:MM time string to total minutes since midnight
+function parseTimeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+export default async function adminRoutes(fastify: FastifyInstance) {
+  // GET /api/admin/attendance/realtime
+  // Returns on_duty_count, on_duty_staff[], facility_breakdown{} — same shape as AdminDashboard expects
+  fastify.get('/admin/attendance/realtime', { preHandler: requireAdmin }, async (request, reply) => {
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // All login records today (scoped)
+    const todayLogins = await prisma.attendance.findMany({
+      where: { ...scopeWhere, action: 'login', timestamp: { gte: today } },
+      orderBy: { timestamp: 'desc' },
+    })
+
+    const config = await prisma.shiftConfig.findUnique({ where: { config_id: 'default' } })
+
+    // Determine who is currently on duty: logged in today with no subsequent logout
+    const onDutyStaff: any[] = []
+    for (const r of todayLogins) {
+      const hasLogout = await prisma.attendance.findFirst({
+        where: { user_id: r.user_id, action: 'logout', timestamp: { gt: r.timestamp } },
+      })
+      if (hasLogout) continue
+
+      // Classify lateness
+      let lateSeconds: number | null = null
+      let status: 'on_time' | 'late' | 'early' | null = null
+      let lateDisplay: string | null = null
+
+      if (config && r.shift_type) {
+        const shiftStartStr = (config as any)[`${r.shift_type}_start`]
+        if (shiftStartStr) {
+          const shiftStartMins = parseTimeToMinutes(shiftStartStr)
+          const grace = config.grace_period_minutes || 15
+          const recordSecs = r.timestamp.getHours() * 3600 + r.timestamp.getMinutes() * 60 + r.timestamp.getSeconds()
+          const shiftStartSecs = shiftStartMins * 60
+          const graceSecs = grace * 60
+          const diffSecs = recordSecs - (shiftStartSecs + graceSecs)
+          if (diffSecs > 0) {
+            lateSeconds = diffSecs
+            status = 'late'
+            lateDisplay = formatDuration(diffSecs)
+          } else if (r.timestamp.getHours() * 60 + r.timestamp.getMinutes() < shiftStartMins) {
+            status = 'early'
+          } else {
+            status = 'on_time'
+          }
+        }
+      }
+
+      onDutyStaff.push({
+        attendance_id: r.attendance_id,
+        user_id: r.user_id,
+        user_name: r.user_name,
+        position: r.position,
+        facility: r.facility,
+        area_of_allocation: r.area_of_allocation,
+        action: r.action,
+        timestamp: r.timestamp.toISOString(),
+        shift_type: r.shift_type,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        status,
+        late_display: lateDisplay,
+        late_seconds: lateSeconds,
+      })
+    }
+
+    // Build facility breakdown from on-duty staff
+    const facilityBreakdown: Record<string, number> = {}
+    for (const s of onDutyStaff) {
+      if (s.facility) facilityBreakdown[s.facility] = (facilityBreakdown[s.facility] || 0) + 1
+    }
+
+    // Build location type breakdown (Facility / Outreach / Workshop or Meeting)
+    const LOCATION_TYPES = ['Facility', 'Outreach', 'Workshop or Meeting']
+    const locationBreakdown: Record<string, { count: number; staff: any[] }> = {}
+    for (const lt of LOCATION_TYPES) {
+      locationBreakdown[lt] = { count: 0, staff: [] }
+    }
+    for (const s of onDutyStaff) {
+      const lt = s.area_of_allocation || 'Facility'
+      if (!locationBreakdown[lt]) locationBreakdown[lt] = { count: 0, staff: [] }
+      locationBreakdown[lt].count++
+      locationBreakdown[lt].staff.push(s)
+    }
+
+    return reply.send({
+      on_duty_count: onDutyStaff.length,
+      on_duty_staff: onDutyStaff,
+      facility_breakdown: facilityBreakdown,
+      location_breakdown: locationBreakdown,
+      // Also include today's full attendance log for the attendance tab
+      attendance: todayLogins.map((r) => {
+        let lateSeconds: number | null = null
+        let earlySeconds: number | null = null
+        let status: 'on_time' | 'late' | 'early' | null = null
+        if (config && r.shift_type) {
+          const recordMins = r.timestamp.getHours() * 60 + r.timestamp.getMinutes()
+          const recordSecs = r.timestamp.getHours() * 3600 + r.timestamp.getMinutes() * 60 + r.timestamp.getSeconds()
+          if (r.action === 'login') {
+            const shiftStartStr = (config as any)[`${r.shift_type}_start`]
+            if (shiftStartStr) {
+              const shiftStartMins = parseTimeToMinutes(shiftStartStr)
+              const grace = config.grace_period_minutes || 15
+              const shiftStartSecs = shiftStartMins * 60
+              const graceSecs = grace * 60
+              const diffSecs = recordSecs - (shiftStartSecs + graceSecs)
+              if (recordMins < shiftStartMins) { status = 'early' }
+              else if (diffSecs > 0) { lateSeconds = diffSecs; status = 'late' }
+              else { status = 'on_time' }
+            }
+          }
+          if (r.action === 'logout') {
+            const shiftEndStr = (config as any)[`${r.shift_type}_end`]
+            if (shiftEndStr) {
+              const shiftEndMins = parseTimeToMinutes(shiftEndStr)
+              const shiftEndSecs = shiftEndMins * 60
+              const diffSecs = shiftEndSecs - recordSecs
+              if (diffSecs > 0) { earlySeconds = diffSecs; status = 'early' }
+              else { status = 'on_time' }
+            }
+          }
+        }
+        return {
+          attendance_id: r.attendance_id,
+          user_id: r.user_id,
+          user_name: r.user_name,
+          position: r.position,
+          facility: r.facility,
+          area_of_allocation: r.area_of_allocation,
+          action: r.action,
+          timestamp: r.timestamp.toISOString(),
+          shift_type: r.shift_type,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          late_display: lateSeconds !== null ? formatDuration(lateSeconds) : null,
+          early_display: earlySeconds !== null ? formatDuration(earlySeconds) : null,
+          status,
+        }
+      }),
+    })
+  })
+
+  // GET /api/admin/users
+  fastify.get('/admin/users', { preHandler: requireAdmin }, async (request, reply) => {
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+    const query = request.query as any
+    const { role, facility, search, page = '1', limit = '50' } = query
+
+    const where: any = { ...scopeWhere }
+    if (role) where.role = role
+    if (facility) where.facility = facility
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({ where, skip, take: parseInt(limit), orderBy: { created_at: 'desc' } }),
+      prisma.user.count({ where }),
+    ])
+
+    return reply.send({
+      users: users.map((u) => ({
+        user_id: u.user_id,
+        email: u.email,
+        name: u.name,
+        phone_number: u.phone_number,
+        position: u.position,
+        province: u.province,
+        district: u.district,
+        facility: u.facility,
+        role: u.role,
+        assigned_scope: u.assigned_scope,
+        assigned_shift: u.assigned_shift,
+        created_at: u.created_at?.toISOString(),
+      })),
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+    })
+  })
+
+  // PUT /api/admin/users/:userId
+  fastify.put('/admin/users/:userId', { preHandler: requireAdmin }, async (request, reply) => {
+    const { userId } = request.params as any
+    const body = request.body as any
+    const actingUser = (request as any).user
+
+    const target = await prisma.user.findUnique({ where: { user_id: userId } })
+    if (!target) return reply.code(404).send({ detail: 'User not found' })
+
+    // Admins cannot promote to admin or superuser
+    if (actingUser.role === 'admin' && body.role && ['admin', 'superuser'].includes(body.role)) {
+      return reply.code(403).send({ detail: 'Only super users can create administrator accounts' })
+    }
+
+    const updated = await prisma.user.update({
+      where: { user_id: userId },
+      data: {
+        name: body.name ?? undefined,
+        phone_number: body.phone_number ?? undefined,
+        position: body.position ?? undefined,
+        province: body.province ?? undefined,
+        district: body.district ?? undefined,
+        facility: body.facility ?? undefined,
+        role: body.role ?? undefined,
+        assigned_scope: body.assigned_scope ?? undefined,
+        assigned_shift: body.assigned_shift ?? undefined,
+      },
+    })
+
+    return reply.send({
+      user_id: updated.user_id,
+      email: updated.email,
+      name: updated.name,
+      role: updated.role,
+      facility: updated.facility,
+      assigned_shift: updated.assigned_shift,
+    })
+  })
+
+  // GET /api/admin/attendance
+  fastify.get('/admin/attendance', { preHandler: requireAdmin }, async (request, reply) => {
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+    const query = request.query as any
+    const { facility, date, user_name, page = '1', limit = '50' } = query
+
+    const where: any = { ...scopeWhere }
+    if (facility) where.facility = facility
+    if (user_name) where.user_name = { contains: user_name, mode: 'insensitive' }
+    if (date) {
+      const start = new Date(date)
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(date)
+      end.setHours(23, 59, 59, 999)
+      where.timestamp = { gte: start, lte: end }
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const [records, total] = await Promise.all([
+      prisma.attendance.findMany({ where, skip, take: parseInt(limit), orderBy: { timestamp: 'desc' } }),
+      prisma.attendance.count({ where }),
+    ])
+
+    return reply.send({
+      attendance: records.map((r) => ({
+        attendance_id: r.attendance_id,
+        user_id: r.user_id,
+        user_name: r.user_name,
+        position: r.position,
+        facility: r.facility,
+        area_of_allocation: r.area_of_allocation,
+        action: r.action,
+        timestamp: r.timestamp.toISOString(),
+        shift_type: r.shift_type,
+        latitude: r.latitude,
+        longitude: r.longitude,
+      })),
+      total,
+    })
+  })
+
+  // GET /api/admin/notifications
+  fastify.get('/admin/notifications', { preHandler: requireAdmin }, async (request, reply) => {
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+    const query = request.query as any
+    const { unread_only, limit = '50' } = query
+
+    const where: any = { ...scopeWhere }
+    if (unread_only === 'true') where.read = false
+
+    const [notifications, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: { timestamp: 'desc' },
+        take: parseInt(limit),
+      }),
+      prisma.notification.count({ where: { ...scopeWhere, read: false } }),
+    ])
+
+    return reply.send({
+      notifications: notifications.map((n) => ({
+        notification_id: n.notification_id,
+        type: n.type,
+        user_id: n.user_id,
+        user_name: n.user_name,
+        facility: n.facility,
+        message: n.message,
+        distance_meters: n.distance_meters,
+        latitude: n.latitude,
+        longitude: n.longitude,
+        timestamp: n.timestamp.toISOString(),
+        read: n.read,
+        attendance_id: n.attendance_id,
+      })),
+      unread_count: unreadCount,
+    })
+  })
+
+  // PUT /api/admin/notifications/:id/read
+  fastify.put('/admin/notifications/:id/read', { preHandler: requireAdmin }, async (request, reply) => {
+    const { id } = request.params as any
+    await prisma.notification.update({ where: { notification_id: id }, data: { read: true } })
+    return reply.send({ message: 'Notification marked as read' })
+  })
+
+  // PUT /api/admin/notifications/read-all
+  fastify.put('/admin/notifications/read-all', { preHandler: requireAdmin }, async (request, reply) => {
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+    await prisma.notification.updateMany({ where: scopeWhere, data: { read: true } })
+    return reply.send({ message: 'All notifications marked as read' })
+  })
+
+  // GET /api/admin/stats — scoped overview stats for admin dashboard
+  fastify.get('/admin/stats', { preHandler: requireAdmin }, async (request, reply) => {
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+
+    // Users currently on duty (scoped)
+    const onDutyRaw = await prisma.attendance.findMany({
+      where: { ...scopeWhere, action: 'login', timestamp: { gte: today } },
+      select: { user_id: true, timestamp: true },
+    })
+    // Filter to those without a logout after their login
+    const onDutyUserIds = new Set<string>()
+    for (const r of onDutyRaw) {
+      const hasLogout = await prisma.attendance.findFirst({
+        where: { user_id: r.user_id, action: 'logout', timestamp: { gt: r.timestamp } },
+      })
+      if (!hasLogout) onDutyUserIds.add(r.user_id)
+    }
+
+    // Today's logins for late/on-time/early breakdown
+    const todayLogins = await prisma.attendance.findMany({
+      where: { ...scopeWhere, action: 'login', timestamp: { gte: today } },
+      select: { timestamp: true, shift_type: true },
+    })
+    const config = await prisma.shiftConfig.findUnique({ where: { config_id: 'default' } })
+    let todayLate = 0, todayOnTime = 0, todayEarly = 0
+    for (const r of todayLogins) {
+      if (!config || !r.shift_type) { todayOnTime++; continue }
+      const shiftStartStr = (config as any)[`${r.shift_type}_start`]
+      if (!shiftStartStr) { todayOnTime++; continue }
+      const shiftStartMins = parseTimeToMinutes(shiftStartStr)
+      const grace = config.grace_period_minutes || 15
+      const recordMins = r.timestamp.getHours() * 60 + r.timestamp.getMinutes()
+      const recordSecs = r.timestamp.getHours() * 3600 + r.timestamp.getMinutes() * 60 + r.timestamp.getSeconds()
+      const shiftStartSecs = shiftStartMins * 60
+      const graceSecs = grace * 60
+      if (recordMins < shiftStartMins) todayEarly++
+      else if (recordSecs <= shiftStartSecs + graceSecs) todayOnTime++
+      else todayLate++
+    }
+
+    const [totalUsers, todayAttendance, totalAttendance] = await Promise.all([
+      prisma.user.count({ where: { role: 'user' } }),
+      prisma.attendance.count({ where: { ...scopeWhere, timestamp: { gte: today } } }),
+      prisma.attendance.count({ where: scopeWhere }),
+    ])
+
+    return reply.send({
+      total_users: totalUsers,
+      today_logins: todayAttendance,
+      currently_on_duty: onDutyUserIds.size,
+      today_attendance: todayAttendance,
+      total_attendance: totalAttendance,
+      today_late: todayLate,
+      today_on_time: todayOnTime,
+      today_early: todayEarly,
+    })
+  })
+
+  // GET /api/admin/attendance-report — scoped attendance report for admin
+  fastify.get('/admin/attendance-report', { preHandler: requireAdmin }, async (request, reply) => {
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+    const query = request.query as any
+    const { facility, date, page = '1', limit = '100' } = query
+
+    const where: any = { ...scopeWhere }
+    if (facility) where.facility = facility
+    if (date) {
+      const start = new Date(date); start.setHours(0, 0, 0, 0)
+      const end = new Date(date); end.setHours(23, 59, 59, 999)
+      where.timestamp = { gte: start, lte: end }
+    }
+
+    const config = await prisma.shiftConfig.findUnique({ where: { config_id: 'default' } })
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const [records, total] = await Promise.all([
+      prisma.attendance.findMany({ where, skip, take: parseInt(limit), orderBy: { timestamp: 'desc' } }),
+      prisma.attendance.count({ where }),
+    ])
+
+    const enriched = records.map((r) => {
+      let lateDisplay: string | null = null
+      let earlyDisplay: string | null = null
+      let status: 'on_time' | 'late' | 'early' | null = null
+
+      if (config && r.shift_type) {
+        const recordMins = r.timestamp.getHours() * 60 + r.timestamp.getMinutes()
+        const recordSecs = r.timestamp.getHours() * 3600 + r.timestamp.getMinutes() * 60 + r.timestamp.getSeconds()
+        if (r.action === 'login') {
+          const shiftStartStr = (config as any)[`${r.shift_type}_start`]
+          if (shiftStartStr) {
+            const shiftStartMins = parseTimeToMinutes(shiftStartStr)
+            const grace = config.grace_period_minutes || 15
+            const shiftStartSecs = shiftStartMins * 60
+            const graceSecs = grace * 60
+            if (recordMins < shiftStartMins) { status = 'early' }
+            else if (recordSecs <= shiftStartSecs + graceSecs) { status = 'on_time' }
+            else { status = 'late'; lateDisplay = formatLateDisplay(Math.floor((recordSecs - shiftStartSecs - graceSecs) / 60)) }
+          }
+        }
+        if (r.action === 'logout') {
+          const shiftEndStr = (config as any)[`${r.shift_type}_end`]
+          if (shiftEndStr) {
+            const shiftEndMins = parseTimeToMinutes(shiftEndStr)
+            const earlyMins = shiftEndMins - recordMins
+            if (earlyMins > 0) earlyDisplay = formatLateDisplay(earlyMins)
+          }
+        }
+      }
+
+      return {
+        attendance_id: r.attendance_id,
+        user_id: r.user_id,
+        user_name: r.user_name,
+        position: r.position,
+        facility: r.facility,
+        area_of_allocation: r.area_of_allocation,
+        action: r.action,
+        timestamp: r.timestamp.toISOString(),
+        shift_type: r.shift_type,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        status,
+        late_display: lateDisplay,
+        early_display: earlyDisplay,
+      }
+    })
+
+    return reply.send({ attendance: enriched, total, page: parseInt(page), limit: parseInt(limit) })
+  })
+
+  // GET /api/admin/shifts
+  fastify.get('/admin/shifts', { preHandler: requireAdmin }, async (_req, reply) => {
+    let config = await prisma.shiftConfig.findUnique({ where: { config_id: 'default' } })
+    if (!config) config = await prisma.shiftConfig.create({ data: { config_id: 'default' } })
+    return reply.send({ config })
+  })
+
+  // PUT /api/admin/users/:userId/shift
+  fastify.put('/admin/users/:userId/shift', { preHandler: requireAdmin }, async (request, reply) => {
+    const { userId } = request.params as any
+    const { shift_type, custom_shift_start, custom_shift_end } = request.body as any
+
+    const updated = await prisma.user.update({
+      where: { user_id: userId },
+      data: {
+        assigned_shift: shift_type || null,
+        custom_shift_start: custom_shift_start || null,
+        custom_shift_end: custom_shift_end || null,
+      },
+    })
+
+    return reply.send({ message: 'Shift assigned', user_id: updated.user_id, assigned_shift: updated.assigned_shift })
+  })
+
+  // GET /api/admin/export  (Excel)
+  fastify.get('/admin/export', { preHandler: requireAdmin }, async (request, reply) => {
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+    const query = request.query as any
+    const { facility, date } = query
+
+    const where: any = { ...scopeWhere }
+    if (facility) where.facility = facility
+    if (date) {
+      const start = new Date(date); start.setHours(0, 0, 0, 0)
+      const end = new Date(date); end.setHours(23, 59, 59, 999)
+      where.timestamp = { gte: start, lte: end }
+    }
+
+    const records = await prisma.attendance.findMany({ where, orderBy: { timestamp: 'desc' } })
+    const config = await prisma.shiftConfig.findUnique({ where: { config_id: 'default' } })
+
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet('Attendance')
+    sheet.columns = [
+      { header: 'Name', key: 'name', width: 25 },
+      { header: 'Position', key: 'position', width: 20 },
+      { header: 'Facility', key: 'facility', width: 30 },
+      { header: 'Action', key: 'action', width: 10 },
+      { header: 'Timestamp', key: 'timestamp', width: 22 },
+      { header: 'Shift', key: 'shift', width: 12 },
+      { header: 'Status', key: 'status', width: 15 },
+    ]
+
+    for (const rec of records) {
+      sheet.addRow({
+        name: rec.user_name,
+        position: rec.position,
+        facility: rec.facility,
+        action: rec.action,
+        timestamp: rec.timestamp.toISOString(),
+        shift: rec.shift_type || '',
+        status: '',
+      })
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    // Audit log the export
+    await auditLog({
+      actor: actorFromRequest(request),
+      action: AUDIT_ACTIONS.EXPORT_ATTENDANCE_REPORT,
+      targetType: 'Attendance',
+      metadata: { facility: facility || 'all', date: date || 'all', record_count: records.length },
+    })
+    reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    reply.header('Content-Disposition', `attachment; filename="attendance_export.xlsx"`)
+    return reply.send(Buffer.from(buffer))
+  })
+
+  // GET /api/admin/send-backup
+  fastify.get('/admin/send-backup', { preHandler: requireAdmin }, async (request, reply) => {
+    const RESEND_API_KEY = process.env.RESEND_API_KEY
+    const BACKUP_EMAIL = process.env.BACKUP_EMAIL
+    if (!RESEND_API_KEY || !BACKUP_EMAIL) {
+      return reply.code(500).send({ detail: 'Email service not configured' })
+    }
+
+    const user = (request as any).user
+    const scopeWhere = await getAdminScopeWhere(user)
+    const query = request.query as any
+    const { facility, date } = query
+
+    const where: any = { ...scopeWhere }
+    if (facility) where.facility = facility
+    if (date) {
+      const start = new Date(date); start.setHours(0, 0, 0, 0)
+      const end = new Date(date); end.setHours(23, 59, 59, 999)
+      where.timestamp = { gte: start, lte: end }
+    }
+
+    const records = await prisma.attendance.findMany({ where, orderBy: { timestamp: 'desc' } })
+    const csvRows = ['Name,Position,Facility,Action,Timestamp,Shift']
+    for (const r of records) {
+      csvRows.push(`${r.user_name},${r.position},${r.facility},${r.action},${r.timestamp.toISOString()},${r.shift_type || ''}`)
+    }
+    const csvContent = csvRows.join('\n')
+
+    try {
+      const { Resend } = await import('resend')
+      const resend = new Resend(RESEND_API_KEY)
+      await resend.emails.send({
+        from: process.env.SENDER_EMAIL || 'onboarding@resend.dev',
+        to: BACKUP_EMAIL,
+        subject: `V-Chron Attendance Backup - ${date || 'All'}`,
+        text: `Attendance backup attached.\n\nRecords: ${records.length}`,
+        attachments: [{ filename: 'attendance_backup.csv', content: Buffer.from(csvContent).toString('base64') }],
+      })
+      return reply.send({ message: 'Backup sent successfully' })
+    } catch (err: any) {
+      return reply.code(500).send({ detail: `Failed to send email: ${err.message}` })
+    }
+  })
+
+  // ─── Shift Tasks ──────────────────────────────────────────────────────────
+
+  // GET /api/admin/tasks/:attendanceId
+  // Admin views tasks for any attendance record within their scope
+  fastify.get('/admin/tasks/:attendanceId', { preHandler: requireAdmin }, async (request, reply) => {
+    const { attendanceId } = request.params as any
+
+    const record = await prisma.shiftTask.findFirst({
+      where: { attendance_id: attendanceId },
+    })
+
+    if (!record) {
+      return reply.send({ tasks: [], has_tasks: false })
+    }
+
+    return reply.send({
+      task_id: record.task_id,
+      user_name: record.user_name,
+      facility: record.facility,
+      tasks: record.tasks,
+      submitted_at: record.submitted_at.toISOString(),
+      has_tasks: true,
+    })
+  })
+}

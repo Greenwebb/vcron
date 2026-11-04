@@ -1,0 +1,317 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Geography & Organisation Hierarchy ──────────────────────────────────────
+
+model Ministry {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique // e.g., "Ministry of Health"
+  unit_term  String    // e.g., "Facility", "School", "Office"
+  is_active  Boolean   @default(false) // only active ministries returned by API
+  created_at DateTime  @default(now())
+
+  org_units  OrgUnit[]
+  positions  Position[]
+  users      User[]
+
+  @@index([name])
+  @@index([is_active])
+}
+
+model Province {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique // e.g., "Central Province"
+
+  districts District[]
+}
+
+model District {
+  id          Int       @id @default(autoincrement())
+  name        String
+  province_id Int
+
+  province    Province  @relation(fields: [province_id], references: [id])
+  org_units   OrgUnit[]
+
+  @@unique([name, province_id])
+  @@index([province_id])
+}
+
+model OrgUnit {
+  id          Int      @id @default(autoincrement())
+  name        String
+  ministry_id Int?
+  district_id Int
+  latitude    Float?
+  longitude   Float?
+  created_at  DateTime @default(now())
+
+  ministry    Ministry? @relation(fields: [ministry_id], references: [id])
+  district    District  @relation(fields: [district_id], references: [id])
+  users       User[]
+
+  @@unique([name, district_id])
+  @@index([district_id])
+  @@index([ministry_id])
+}
+
+model Position {
+  id          Int      @id @default(autoincrement())
+  name        String
+  ministry_id Int?     // null = applies to all ministries
+
+  ministry    Ministry? @relation(fields: [ministry_id], references: [id])
+
+  @@unique([name, ministry_id])
+  @@index([ministry_id])
+}
+
+// ─── Legacy Facility (kept for backward compat - existing data) ─────────────
+
+model Facility {
+  id          Int      @id @default(autoincrement())
+  facility_id String   @unique @default(cuid())
+  name        String   @unique
+  district    String
+  province    String
+  latitude    Float?
+  longitude   Float?
+  created_at  DateTime @default(now())
+
+  @@index([district])
+  @@index([province])
+}
+
+// ─── Auth & OTP ──────────────────────────────────────────────────────────────
+
+model OtpCode {
+  id         Int      @id @default(autoincrement())
+  identifier String   // email or phone number
+  code       String   // 6-digit code
+  purpose    String   @default("registration") // "registration" | "login" | "delete"
+  expires_at DateTime
+  used       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  @@index([identifier])
+  @@index([expires_at])
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                    Int           @id @default(autoincrement())
+  user_id               String        @unique
+  email                 String        @unique
+  password              String?
+  name                  String
+  phone_number          String?
+  is_verified           Boolean       @default(false)
+  setup_complete        Boolean       @default(false)
+
+  // Relational profile fields (new)
+  ministry_id           Int?
+  org_unit_id           Int?
+
+  // Legacy flat fields (kept for backward compat during migration)
+  position              String?
+  province              String?
+  district              String?
+  facility              String?
+  area_of_allocation    String?
+
+  picture               String?
+  role                  String        @default("user")
+  assigned_scope        Json?
+  assigned_jurisdiction Json?
+  assigned_shift        String?
+  custom_shift_start    String?
+  custom_shift_end      String?
+  delete_requested      Boolean       @default(false)
+  delete_requested_at   DateTime?
+  created_at            DateTime      @default(now())
+
+  ministry              Ministry?     @relation(fields: [ministry_id], references: [id])
+  org_unit              OrgUnit?      @relation(fields: [org_unit_id], references: [id])
+  sessions              UserSession[]
+  attendance            Attendance[]
+  reports               UserReport[]
+
+  @@index([role])
+  @@index([facility])
+  @@index([district])
+  @@index([ministry_id])
+  @@index([org_unit_id])
+}
+
+// ─── Sessions ────────────────────────────────────────────────────────────────
+
+model UserSession {
+  id            Int      @id @default(autoincrement())
+  session_token String   @unique
+  user_id       String
+  expires_at    DateTime
+  created_at    DateTime @default(now())
+
+  user          User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+model Attendance {
+  id                 Int      @id @default(autoincrement())
+  attendance_id      String   @unique
+  offline_id         String?  @unique
+  user_id            String
+  user_name          String
+  position           String
+  facility           String
+  area_of_allocation String?
+  action             String
+  timestamp          DateTime
+  latitude           Float?
+  longitude          Float?
+  shift_type         String?
+  synced             Boolean  @default(true)
+  ministry_id        Int?     // for future filtering by ministry
+
+  user               User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([facility])
+  @@index([timestamp])
+  @@index([ministry_id])
+  @@index([user_id, timestamp(sort: Desc)])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id              Int      @id @default(autoincrement())
+  notification_id String   @unique
+  type            String
+  user_id         String
+  user_name       String
+  facility        String
+  message         String
+  distance_meters Int?
+  latitude        Float?
+  longitude       Float?
+  timestamp       DateTime
+  read            Boolean  @default(false)
+  attendance_id   String?
+
+  @@index([facility])
+  @@index([read])
+  @@index([timestamp])
+}
+
+// ─── Shift Configuration ──────────────────────────────────────────────────────
+
+model ShiftConfig {
+  id                   Int      @id @default(autoincrement())
+  config_id            String   @unique @default("default")
+  morning_start        String   @default("06:00")
+  morning_end          String   @default("14:00")
+  afternoon_start      String   @default("14:00")
+  afternoon_end        String   @default("22:00")
+  night_start          String   @default("22:00")
+  night_end            String   @default("06:00")
+  four_off_start       String   @default("07:00")
+  four_off_end         String   @default("19:00")
+  on_call_start        String   @default("00:00")
+  on_call_end          String   @default("23:59")
+  grace_period_minutes Int      @default(15)
+  lunch_duration_mins  Int      @default(60) // for 4-off shift optional lunch
+  updated_at           DateTime @updatedAt
+}
+
+// ─── Account Deletion Requests ──────────────────────────────────────────────
+
+model DeletionRequest {
+  id           Int       @id @default(autoincrement())
+  request_id   String    @unique @default(cuid())
+  user_id      String
+  user_name    String
+  user_email   String
+  reason       String?
+  status       String    @default("pending") // "pending" | "approved" | "rejected"
+  reviewed_by  String?   // admin/superuser user_id who actioned it
+  reviewer_name String?
+  reviewed_at  DateTime?
+  created_at   DateTime  @default(now())
+
+  @@index([status])
+  @@index([user_id])
+  @@index([created_at])
+}
+
+// ─── User Reports ───────────────────────────────────────────────────────────
+
+model UserReport {
+  id           Int      @id @default(autoincrement())
+  report_id    String   @unique @default(cuid())
+  user_id      String
+  user_name    String
+  period_label String   // e.g. "March 2026", "Week 12 2026", "01 Mar – 07 Mar 2026"
+  period_type  String   // "monthly" | "weekly" | "daily" | "custom"
+  date_from    DateTime
+  date_to      DateTime
+  record_count Int      @default(0)
+  file_url     String?  // direct download URL (stored on server temp or S3)
+  emailed      Boolean  @default(false)
+  emailed_at   DateTime?
+  created_at   DateTime @default(now())
+
+  user         User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([created_at])
+}
+
+// ─── Shift Tasks ─────────────────────────────────────────────────────────────
+// Tasks submitted by staff at checkout to log what they accomplished during shift
+
+model ShiftTask {
+  id            Int      @id @default(autoincrement())
+  task_id       String   @unique @default(cuid())
+  attendance_id String   // References Attendance.attendance_id (the logout record)
+  user_id       String
+  user_name     String
+  facility      String
+  tasks         Json     // Array of { text: string, order: number }
+  submitted_at  DateTime @default(now())
+
+  @@index([attendance_id])
+  @@index([user_id])
+  @@index([facility])
+  @@index([submitted_at])
+}
+
+// ─── Audit Trail ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  actor_id    String   // user_id of who performed the action
+  actor_name  String
+  actor_role  String
+  action      String   // e.g., "EXPORT_REPORT", "APPROVE_DELETION", "DELETE_USER"
+  target_type String?  // e.g., "User", "Attendance"
+  target_id   String?  // ID of the affected record
+  metadata    Json?    // Additional context (e.g., filters used for export)
+  created_at  DateTime @default(now())
+
+  @@index([actor_id])
+  @@index([action])
+  @@index([created_at])
+}
