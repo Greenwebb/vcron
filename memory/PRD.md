@@ -7,7 +7,7 @@ Build a mobile and web MVP application called "v-chron" for attendance tracking 
 - **Backend:** FastAPI (Python), Motor (async MongoDB)
 - **Frontend:** React, Tailwind CSS, Shadcn UI, React Router
 - **Database:** MongoDB
-- **Auth:** JWT + Emergent-managed Google OAuth
+- **Auth:** JWT + Google OAuth 2.0
 
 ## What's Been Implemented
 
