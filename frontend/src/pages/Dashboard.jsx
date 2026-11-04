@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import Logo from "@/components/Logo";
 import { toast } from "sonner";
 import { 
   Clock, 
@@ -460,15 +461,7 @@ const Dashboard = () => {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center">
-              <Clock className="w-6 h-6 text-teal-600" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 font-['Manrope']">V-Chron</h1>
-              <p className="text-xs text-slate-500">The Truth of Time</p>
-            </div>
-          </div>
+          <Logo variant="default" size="md" className="max-w-[190px]" />
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-4">
