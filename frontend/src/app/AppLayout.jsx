@@ -381,7 +381,7 @@ export default function AppLayout() {
       >
         <div className="flex items-center justify-between px-4 h-[60px] max-w-lg mx-auto">
           <div className="flex items-center gap-2">
-            <img src="/logo192.png" alt="VChron" className="w-7 h-7 rounded-lg object-contain" />
+            <Logo variant="default" size="sm" className="max-w-[100px]" />
             <span className="text-slate-900 font-semibold text-sm">{pageTitle}</span>
           </div>
           <button
