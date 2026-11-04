@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Clock, MapPin, Shield, Users, ChevronRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import Logo from "@/components/Logo";
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -100,15 +101,7 @@ const Landing = () => {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Nav */}
           <nav className="flex items-center justify-between py-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white font-['Manrope']">V-Chron</h1>
-                <p className="text-xs text-teal-200">The Truth of Time</p>
-              </div>
-            </div>
+            <Logo variant="light" size="md" className="max-w-[190px]" />
             <div className="flex gap-3">
               <Button 
                 variant="ghost" 
