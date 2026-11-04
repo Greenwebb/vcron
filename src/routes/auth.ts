@@ -483,32 +483,62 @@ export default async function authRoutes(fastify: FastifyInstance) {
   })
 
   fastify.post('/auth/complete-registration', { preHandler: authenticate }, async (request, reply) => {
-    const { phone_number, ministry_id, org_unit_id, position } = request.body as any
+    const { phone_number, ministry_id, org_unit_id, position, province, district, facility } = request.body as any
 
-    if (!ministry_id || !org_unit_id || !position) {
-      return reply.code(400).send({ detail: 'Ministry, organisation unit, and position are required' })
+    let resolvedMinistryId: number | null = null
+    let resolvedOrgUnit: any = null
+
+    if (ministry_id && org_unit_id && position) {
+      const ministry = await prisma.ministry.findUnique({ where: { id: parseInt(ministry_id) } })
+      if (!ministry) return reply.code(400).send({ detail: 'Invalid ministry' })
+
+      const orgUnit = await prisma.orgUnit.findFirst({
+        where: { id: parseInt(org_unit_id), ministry_id: parseInt(ministry_id) },
+        include: { district: { include: { province: true } } },
+      })
+      if (!orgUnit) return reply.code(400).send({ detail: 'Invalid organisation unit' })
+
+      resolvedMinistryId = parseInt(ministry_id)
+      resolvedOrgUnit = orgUnit
+    } else if (position && province && district && facility) {
+      const districtRecord = await prisma.district.findFirst({
+        where: {
+          name: district,
+          province: { name: province },
+        },
+      })
+      if (!districtRecord) return reply.code(400).send({ detail: 'Invalid district' })
+
+      const orgUnit = await prisma.orgUnit.findFirst({
+        where: {
+          name: facility,
+          district_id: districtRecord.id,
+        },
+        include: { district: { include: { province: true } } },
+      })
+      if (!orgUnit) return reply.code(400).send({ detail: 'Invalid facility' })
+
+      if (!orgUnit.ministry_id) {
+        return reply.code(400).send({ detail: 'Facility is not linked to a ministry' })
+      }
+
+      resolvedMinistryId = orgUnit.ministry_id
+      resolvedOrgUnit = orgUnit
+    } else {
+      return reply.code(400).send({ detail: 'Required registration fields are missing' })
     }
-
-    const ministry = await prisma.ministry.findUnique({ where: { id: parseInt(ministry_id) } })
-    if (!ministry) return reply.code(400).send({ detail: 'Invalid ministry' })
-
-    const orgUnit = await prisma.orgUnit.findFirst({
-      where: { id: parseInt(org_unit_id), ministry_id: parseInt(ministry_id) },
-      include: { district: { include: { province: true } } },
-    })
-    if (!orgUnit) return reply.code(400).send({ detail: 'Invalid organisation unit' })
 
     const userId = (request as any).user.user_id
     const updated = await prisma.user.update({
       where: { user_id: userId },
       data: {
         phone_number: phone_number || undefined,
-        ministry_id: parseInt(ministry_id),
-        org_unit_id: parseInt(org_unit_id),
+        ministry_id: resolvedMinistryId,
+        org_unit_id: resolvedOrgUnit.id,
         position,
-        province: orgUnit.district.province.name,
-        district: orgUnit.district.name,
-        facility: orgUnit.name,
+        province: resolvedOrgUnit.district.province.name,
+        district: resolvedOrgUnit.district.name,
+        facility: resolvedOrgUnit.name,
         setup_complete: true,
       },
     })

@@ -15,10 +15,11 @@
  */
 
 import PDFDocument from 'pdfkit'
-import { writeFileSync, unlinkSync, existsSync } from 'fs'
+import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomBytes } from 'crypto'
+import { execFileSync } from 'child_process'
 
 export interface AttendanceRecord {
   attendance_id: string
@@ -274,26 +275,28 @@ function buildPdfBuffer(opts: ReportOptions): Promise<Buffer> {
 // ─── Encrypt PDF using qpdf (via node-qpdf2) ─────────────────────────────────
 async function encryptPdf(pdfBuffer: Buffer, password: string): Promise<Buffer> {
   const tmpIn = join(tmpdir(), `vcron-report-${randomBytes(8).toString('hex')}.pdf`)
+  const tmpOut = join(tmpdir(), `vcron-report-encrypted-${randomBytes(8).toString('hex')}.pdf`)
   try {
     writeFileSync(tmpIn, pdfBuffer)
-    const { encrypt } = await import('node-qpdf2')
-    const encryptedBuffer = await encrypt({
-      input: tmpIn,
-      password: { user: password, owner: `vcron-owner-${password}` },
-      keyLength: 256,
-      restrictions: {
-        print: 'low',
-        modify: 'none',
-        extract: 'n',
-        annotate: 'n',
-        assemble: 'n',
-        accessibility: 'y',
-      },
-    })
-    return encryptedBuffer
+    execFileSync('qpdf', [
+      '--encrypt', password, `vcron-owner-${password}`, '256',
+      '--print=low',
+      '--modify=none',
+      '--extract=n',
+      '--annotate=n',
+      '--assemble=n',
+      '--accessibility=y',
+      '--',
+      tmpIn,
+      tmpOut,
+    ])
+    return readFileSync(tmpOut)
   } finally {
     if (existsSync(tmpIn)) {
       try { unlinkSync(tmpIn) } catch { /* ignore cleanup errors */ }
+    }
+    if (existsSync(tmpOut)) {
+      try { unlinkSync(tmpOut) } catch { /* ignore cleanup errors */ }
     }
   }
 }

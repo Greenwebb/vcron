@@ -43,6 +43,14 @@ export default async function dataRoutes(fastify: FastifyInstance) {
     return reply.send({ positions })
   }
 
+  const legacyPositionsHandler = async (_req: any, reply: any) => {
+    const positions = await prisma.position.findMany({
+      orderBy: { name: 'asc' },
+      select: { name: true },
+    })
+    return reply.send({ positions: positions.map((p) => p.name) })
+  }
+
   const areasHandler = async (_req: any, reply: any) => {
     return reply.send({ areas: ['Facility', 'Outreach', 'Workshop or Meeting'] })
   }
@@ -145,7 +153,7 @@ export default async function dataRoutes(fastify: FastifyInstance) {
 
   // ─── NEW: Positions (optionally filtered by ministry_id) ──────────────────────
   fastify.get('/data/positions', positionsHandler)
-  fastify.get('/positions', positionsHandler)
+  fastify.get('/positions', legacyPositionsHandler)
 
   // ─── Areas of allocation — both /areas and /data/areas work ────────────────────
   fastify.get('/areas', areasHandler)
