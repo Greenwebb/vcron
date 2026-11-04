@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = 'vchron-v1';
+const CACHE_NAME = 'vchron-v2';
 const urlsToCache = [
   '/',
   '/index.html',
