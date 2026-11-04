@@ -268,16 +268,18 @@ const Dashboard = () => {
         });
 
         if (response.ok) {
-          toast.success(
-            action === "login" 
-              ? "Successfully reported for duty!" 
+          const result = await response.json();
+          const recordedAction = result.action || action;
+          toast.success(result.message || (
+            recordedAction === "login"
+              ? "Successfully reported for duty!"
               : "Shift ended successfully!"
-          );
-          if (action === "logout") {
+          ));
+          if (recordedAction === "logout") {
             setSelectedArea("");
             setSelectedShift("");
           }
-          fetchStatus();
+          await fetchStatus();
         } else {
           const error = await response.json();
           toast.error(error.detail || "Failed to record attendance");
@@ -334,7 +336,20 @@ const Dashboard = () => {
     );
   }
 
-  const isOnDuty = status?.status === "on_duty";
+  const isOnDuty = typeof status?.is_on_duty === "boolean"
+    ? status.is_on_duty
+    : status?.status === "on_duty";
+  const rawLastAction = status?.last_action;
+  const lastActionName = typeof rawLastAction === "string"
+    ? rawLastAction
+    : rawLastAction?.action;
+  const lastActionTimestamp = typeof rawLastAction === "string"
+    ? status?.last_timestamp
+    : rawLastAction?.timestamp;
+  const parsedLastActionTime = lastActionTimestamp ? new Date(lastActionTimestamp) : null;
+  const formattedLastActionTime = parsedLastActionTime && !Number.isNaN(parsedLastActionTime.getTime())
+    ? parsedLastActionTime.toLocaleString()
+    : "Time unavailable";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -678,15 +693,15 @@ const Dashboard = () => {
         </div>
 
         {/* Last Action Info */}
-        {status?.last_action && (
+        {lastActionName && (
           <Card className="border-slate-200 shadow-sm">
             <CardContent className="p-4">
               <p className="text-sm text-slate-500">
                 Last action: <span className="font-medium text-slate-700">
-                  {status.last_action.action === "login" ? "Reported for duty" : "Ended shift"}
+                  {lastActionName === "login" ? "Reported for duty" : "Ended shift"}
                 </span> at{" "}
                 <span className="font-mono text-xs text-slate-600">
-                  {new Date(status.last_action.timestamp).toLocaleString()}
+                  {formattedLastActionTime}
                 </span>
               </p>
             </CardContent>
