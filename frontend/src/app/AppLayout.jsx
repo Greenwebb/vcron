@@ -355,7 +355,9 @@ export default function AppLayout() {
       <div className="fixed inset-0 overflow-hidden bg-gradient-to-br from-[var(--vchron-teal-dark)] via-[var(--vchron-teal)] to-[var(--vchron-teal-light)]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_38%)]" />
         <div className="relative z-10 flex h-full items-center justify-center px-6">
-          <Logo variant="light" size="lg" className="scale-[0.88] drop-shadow-[0_14px_32px_rgba(0,0,0,0.24)]" />
+          <div className="rounded-2xl bg-white px-4 py-2 shadow-[0_14px_32px_rgba(0,0,0,0.24)]">
+            <Logo variant="dark" size="lg" className="scale-[0.88]" />
+          </div>
         </div>
         <div className="absolute bottom-12 left-1/2 z-10 -translate-x-1/2">
           <div className="h-10 w-10 rounded-full border-[3px] border-white/35 border-t-white animate-spin" />

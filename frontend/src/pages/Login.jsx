@@ -325,7 +325,7 @@ const Login = () => {
             {/* ── Step 2: OTP input ── */}
             {step === "verify" && (
               <form onSubmit={handleVerifyOtp} className="space-y-6">
-                <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+                <div className="grid w-full grid-cols-6 gap-1.5 sm:gap-2" onPaste={handleOtpPaste}>
                   {otp.map((digit, i) => (
                     <input
                       key={i}
@@ -336,7 +336,7 @@ const Login = () => {
                       value={digit}
                       onChange={(e) => handleOtpChange(i, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                      className="w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100 transition-colors"
+                      className="min-w-0 w-full h-12 sm:h-14 text-center text-lg sm:text-xl font-bold border-2 border-slate-200 rounded-xl focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100 transition-colors"
                       autoFocus={i === 0}
                     />
                   ))}
