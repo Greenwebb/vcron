@@ -187,6 +187,7 @@ function AppRouter() {
 
         {/* ── Install page (public, no auth required) ── */}
         <Route path="/install" element={<Suspense fallback={<PageLoader />}><InstallPage /></Suspense>} />
+        <Route path="/app/install" element={<Suspense fallback={<PageLoader />}><InstallPage /></Suspense>} />
 
         {/* ── PWA /app routes ── */}
         {/* Auth pages (no shell) */}

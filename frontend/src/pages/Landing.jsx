@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Clock, MapPin, Shield, Users, ChevronRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -252,11 +252,11 @@ const Landing = () => {
       {/* Footer */}
       <footer className="py-8 px-4 border-t border-slate-200">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-teal-600" />
-            <span className="font-semibold text-slate-900 font-['Manrope']">V-Chron</span>
-            <span className="text-slate-400">|</span>
-            <span className="text-sm text-slate-500">The Truth of Time</span>
+          <div className="flex flex-col items-center gap-3 sm:flex-row">
+            <Logo size="sm" />
+            <Link to="/install" className="text-sm font-medium text-teal-700 underline underline-offset-4">
+              Install the app
+            </Link>
           </div>
           <p className="text-sm text-slate-500">
             &copy; {new Date().getFullYear()} V-Chron. Healthcare Attendance System.
