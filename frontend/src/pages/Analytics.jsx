@@ -162,7 +162,7 @@ const Analytics = () => {
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
             <div className="h-5 w-px bg-slate-200" />
-            <Logo variant="light" size="sm" />
+            <Logo variant="dark" size="sm" />
           </div>
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-amber-700" />

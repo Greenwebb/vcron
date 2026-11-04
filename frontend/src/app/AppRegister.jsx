@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { ChevronLeft, Check } from 'lucide-react'
 import { API, setStoredToken } from '../lib/api'
+import Logo from '../components/Logo'
 
 // ─── Step Indicator ───────────────────────────────────────────────────────────
 function StepDots({ current }) {
@@ -241,7 +242,7 @@ export default function AppRegister() {
           </Link>
         )}
         <div className="flex items-center gap-2">
-          <img src="/logo192.png" alt="VChron" className="w-7 h-7 rounded-lg" />
+          <Logo variant="light" size="sm" className="max-w-[100px]" />
           <span className="text-white font-semibold text-sm">Create Account</span>
         </div>
       </div>

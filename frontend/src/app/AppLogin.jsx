@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { API, authFetch, clearStoredToken, setStoredToken } from '../lib/api'
+import Logo from '../components/Logo'
 
 // ─── OTP Input ────────────────────────────────────────────────────────────────
 function OtpInput({ value, onChange }) {
@@ -158,9 +159,7 @@ export default function AppLogin() {
     <div className="min-h-screen bg-slate-900 flex flex-col">
       {/* Splash top */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pt-12 pb-6">
-        <img src="/logo192.png" alt="VChron" className="w-20 h-20 rounded-2xl mb-4 shadow-2xl" />
-        <h1 className="text-2xl font-bold text-white mb-1">VChron</h1>
-        <p className="text-slate-400 text-sm mb-8">Verified Workforce Intelligence</p>
+        <Logo variant="light" size="lg" className="max-w-[240px] mb-8" />
 
         <div className="w-full max-w-sm">
           {step === 1 ? (
