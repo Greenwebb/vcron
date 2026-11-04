@@ -109,7 +109,7 @@ const SuperUserDashboard = () => {
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-white border border-slate-200 p-1 grid grid-cols-7 w-full max-w-4xl">
+          <TabsList className="bg-white border border-slate-200 p-1 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 w-full max-w-4xl h-auto">
             <TabsTrigger value="overview" className="data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800" data-testid="su-tab-overview">
               <BarChart3 className="w-4 h-4 mr-1" />
               <span className="hidden sm:inline">Overview</span>

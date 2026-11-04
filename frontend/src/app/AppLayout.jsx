@@ -91,6 +91,9 @@ function Drawer({ open, onClose, user, role, onLogout }) {
 
   // Worker items — always shown
   const workerItems = [
+    { label: 'Shift Status',          icon: Home,         route: '/app/dashboard' },
+    { label: 'Attendance History',     icon: Clock,        route: '/app/history' },
+    { label: 'My Reports',            icon: FileText,      route: '/app/my-reports' },
     { label: 'About VChron',           icon: Info,         route: '/app/about' },
     { label: 'Privacy Policy',         icon: FileCheck,    route: '/app/privacy-policy' },
     { label: 'Terms & Conditions',     icon: ClipboardList,route: '/app/terms' },
@@ -344,6 +347,11 @@ export default function AppLayout() {
     '/app/deletion-requests': 'Deletion Requests',
   }
   const pageTitle = titles[location.pathname] || 'VChron'
+  const wideRoutes = [
+    '/app/admin', '/app/superuser', '/app/analytics', '/app/audit-trail',
+    '/app/admin-scoping', '/app/deletion-requests',
+  ]
+  const contentWidth = wideRoutes.includes(location.pathname) ? 'max-w-7xl' : 'max-w-lg'
 
   // Banner height offset
   const bannerOffset = showInstallBanner ? 48 : 0
@@ -400,9 +408,7 @@ export default function AppLayout() {
         className="flex-1 overflow-y-auto pb-[72px]"
         style={{ paddingTop: showInstallBanner ? '108px' : '60px' }}
       >
-        <div
-          className={`max-w-lg mx-auto w-full min-h-full transition-opacity duration-150 ${pageReady ? 'opacity-100' : 'opacity-0'}`}
-        >
+        <div className={`${contentWidth} mx-auto w-full min-h-full transition-opacity duration-150 ${pageReady ? 'opacity-100' : 'opacity-0'}`}>
           {pageReady
             ? <Outlet context={{ user, role }} />
             : <AppPageSkeleton />

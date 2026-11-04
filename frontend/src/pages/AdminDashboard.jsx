@@ -360,7 +360,7 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid grid-cols-6 w-full max-w-3xl">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 w-full max-w-3xl h-auto">
             <TabsTrigger value="realtime" data-testid="tab-realtime">
               <Activity className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Real-time</span>

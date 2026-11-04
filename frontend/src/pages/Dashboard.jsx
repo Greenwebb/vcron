@@ -15,6 +15,7 @@ import {
   LogIn, 
   LogOut, 
   History, 
+  FileText,
   Settings, 
   User, 
   Wifi, 
@@ -546,6 +547,14 @@ const Dashboard = () => {
             >
               <History className="w-4 h-4 mr-2" />
               History
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-slate-600"
+              onClick={() => { navigate("/my-reports"); setMobileMenuOpen(false); }}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              My Reports
             </Button>
             {user?.role === "admin" && (
               <Button 
