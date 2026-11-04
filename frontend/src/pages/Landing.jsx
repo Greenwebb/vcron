@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Clock, MapPin, Shield, Users, ChevronRight } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -26,6 +27,59 @@ const Landing = () => {
       title: "Team Management",
       description: "Real-time monitoring for administrators"
     }
+  ];
+
+  const faqs = [
+    {
+      question: "1. What is VChron?",
+      answer:
+        "VChron is a digital attendance and productivity tracking system designed to monitor staff presence, duty status, and performance in real time. It supports organizations—particularly in public service and health sectors—in improving accountability, workforce management, and service delivery.",
+    },
+    {
+      question: "2. What data is collected?",
+      answer:
+        "VChron collects essential operational data such as user identification details (e.g., name, ID), login and logout timestamps, duty status, location (when required and authorized), and basic activity logs related to attendance and productivity. The system is designed to collect only data that is necessary for administrative and performance monitoring purposes.",
+    },
+    {
+      question: "3. Is my data safe?",
+      answer:
+        "Yes. VChron incorporates security measures such as encrypted data transmission, controlled user access levels, and secure data storage. It complies with standard data protection principles to ensure that personal and organizational data is protected against unauthorized access, loss, or misuse.",
+    },
+    {
+      question: "4. How long does it take to log in and out?",
+      answer:
+        "Logging in or out typically takes only a few seconds, depending on network connectivity and device performance. The system is optimized for quick access to minimize disruption to routine duties.",
+    },
+    {
+      question: "5. Does VChron work offline?",
+      answer:
+        "VChron has limited offline functionality. Users may be able to record attendance without an internet connection, but the data will only sync with the central system once connectivity is restored.",
+    },
+    {
+      question: "6. Does VChron track officers when they are off duty?",
+      answer:
+        "No. VChron is designed to track activity only during official duty periods. It does not monitor users outside working hours unless explicitly authorized for specific operational purposes.",
+    },
+    {
+      question: "7. How much data does VChron use?",
+      answer:
+        "VChron uses minimal mobile data because it primarily transmits small amounts of information such as timestamps and user activity logs. Typical usage is low and suitable even for areas with limited bandwidth.",
+    },
+    {
+      question: "8. Can VChron be integrated with other government systems?",
+      answer:
+        "Yes. VChron can be configured to integrate with other systems such as HR platforms, payroll systems, or health information systems (e.g., DHIS2), depending on organizational requirements and technical setup.",
+    },
+    {
+      question: "9. What devices are compatible with VChron?",
+      answer:
+        "VChron is compatible with Android and iOS smartphones and tablets, and may also be accessible via web browsers on computers. The exact compatibility depends on the version deployed and system requirements.",
+    },
+    {
+      question: "10. What happens if I forget to log in or out?",
+      answer:
+        "If a user forgets to log in or out, the system may allow manual correction requests or supervisor verification. Administrators can review logs and make appropriate adjustments to ensure accurate attendance records.",
+    },
   ];
 
   return (
@@ -172,6 +226,33 @@ const Landing = () => {
             Create Account
             <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
+        </div>
+      </div>
+
+      {/* FAQ Section */}
+      <div className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-slate-900 font-['Manrope'] mb-4">
+            Frequently Asked Questions (FAQ)
+          </h2>
+          <p className="text-slate-600 max-w-2xl mx-auto">
+            Common questions about how VChron works, what it collects, and how it supports organizations.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <Accordion type="single" collapsible className="w-full">
+            {faqs.map((faq, index) => (
+              <AccordionItem key={index} value={`faq-${index}`} className="px-6 md:px-8">
+                <AccordionTrigger className="text-left text-base md:text-lg font-semibold text-slate-900">
+                  {faq.question}
+                </AccordionTrigger>
+                <AccordionContent className="text-slate-600 leading-7 text-sm md:text-base">
+                  {faq.answer}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </div>
 
