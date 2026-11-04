@@ -9,7 +9,7 @@
 import { FastifyInstance } from 'fastify'
 import prisma from '../lib/prisma'
 import { authenticate } from '../plugins/authenticate'
-import { generateEncryptedReport } from '../lib/reportGenerator'
+import { generateEncryptedReport, getReportLogoBuffer } from '../lib/reportGenerator'
 import { sendMail } from '../lib/mailer'
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns'
 
@@ -133,9 +133,8 @@ export default async function reportRoutes(fastify: FastifyInstance) {
       const passwordHint = fullUser.phone_number.replace(/\D/g, '')
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: #0f766e; padding: 24px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">VChron</h1>
-            <p style="color: #ccfbf1; margin: 4px 0 0; font-size: 12px;">Verified Workforce Intelligence</p>
+          <div style="background: #f8fafc; border-bottom: 4px solid #0f766e; padding: 24px; text-align: center;">
+            <img src="cid:vchron-logo" alt="VChron - Verified Workforce Intelligence" width="220" style="display: block; width: 220px; max-width: 100%; height: auto; margin: 0 auto;" />
           </div>
           <div style="padding: 24px; background: #f8fafc;">
             <h2 style="color: #1e293b;">Your Attendance Report is Ready</h2>
@@ -169,6 +168,13 @@ export default async function reportRoutes(fastify: FastifyInstance) {
               filename: `VChron_Report_${fullUser.name.replace(/\s+/g, '_')}_${periodLabel.replace(/\s+/g, '_')}.pdf`,
               content: pdfBuffer,
               contentType: 'application/pdf',
+            },
+            {
+              filename: 'vchron-logo.png',
+              content: getReportLogoBuffer(),
+              contentType: 'image/png',
+              cid: 'vchron-logo',
+              disposition: 'inline',
             },
           ],
         })

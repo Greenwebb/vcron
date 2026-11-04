@@ -21,6 +21,12 @@ import { join } from 'path'
 import { randomBytes } from 'crypto'
 import { execFileSync } from 'child_process'
 
+export const REPORT_LOGO_PATH = join(__dirname, '../../assets/vchron-logo.png')
+
+export function getReportLogoBuffer(): Buffer {
+  return readFileSync(REPORT_LOGO_PATH)
+}
+
 export interface AttendanceRecord {
   attendance_id: string
   action: string
@@ -70,7 +76,11 @@ function buildPdfBuffer(opts: ReportOptions): Promise<Buffer> {
     const FOOTER_H    = 55
     const SAFE_BOTTOM = PAGE_HEIGHT - FOOTER_H - 20  // stop adding rows before footer zone
 
-    const doc = new PDFDocument({ margin: MARGIN, size: 'A4', autoFirstPage: true })
+    const doc = new PDFDocument({
+      margins: { top: MARGIN, right: MARGIN, bottom: 0, left: MARGIN },
+      size: 'A4',
+      autoFirstPage: true,
+    })
     const chunks: Buffer[] = []
     doc.on('data', (chunk: Buffer) => chunks.push(chunk))
     doc.on('end',  () => resolve(Buffer.concat(chunks)))
@@ -92,10 +102,9 @@ function buildPdfBuffer(opts: ReportOptions): Promise<Buffer> {
       // Teal banner
       doc.rect(0, 0, PAGE_WIDTH, 88).fill(TEAL)
 
-      // Logo / brand left
-      doc.fillColor(WHITE).fontSize(24).font('Helvetica-Bold').text('VChron', MARGIN, 18)
-      doc.fontSize(9).font('Helvetica').text('Verified Workforce Intelligence', MARGIN, 48)
-      doc.fontSize(8).text('A GreenWebb Product', MARGIN, 62)
+      // Keep the actual brand mark on every page, including emailed PDFs.
+      doc.roundedRect(MARGIN, 10, 184, 68, 8).fill(WHITE)
+      doc.image(REPORT_LOGO_PATH, MARGIN + 7, 17, { fit: [170, 54], align: 'center', valign: 'center' })
 
       // Report title right
       doc.fontSize(13).font('Helvetica-Bold')
