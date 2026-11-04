@@ -1,12 +1,15 @@
-import { Clock } from "lucide-react";
+import logoDark from "@/assets/logo-dark.svg";
+import logoLight from "@/assets/logo-light.svg";
 import { cn } from "@/lib/utils";
 
 export default function Logo({ variant = "default", size = "md", className }) {
-  const sizes = { sm: "text-lg", md: "text-2xl", lg: "text-3xl", xl: "text-5xl" };
-  return (
-    <span className={cn("inline-flex items-center gap-2 font-bold tracking-tight", sizes[size] || sizes.md, variant === "light" ? "text-white" : "text-teal-700", className)}>
-      <Clock aria-hidden="true" className="h-[1em] w-[1em]" />
-      <span>VChron</span>
-    </span>
-  );
+  const heights = { sm: 32, md: 40, lg: 56, xl: 64 };
+  return <img
+    src={variant === "light" ? logoLight : logoDark}
+    alt="VChron - Verified Workforce Intelligence"
+    height={heights[size] || heights.md}
+    className={cn("w-auto object-contain", className)}
+    style={{ height: heights[size] || heights.md }}
+    draggable={false}
+  />;
 }

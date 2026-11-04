@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { 
   Clock, 
@@ -21,7 +23,9 @@ import {
   Menu,
   X,
   Phone,
-  Shield
+  Shield,
+  ClipboardList,
+  Plus
 } from "lucide-react";
 import { API, authFetch, clearStoredToken } from "@/lib/api";
 import localforage from "localforage";
@@ -48,6 +52,13 @@ const Dashboard = () => {
   const [availableShifts, setAvailableShifts] = useState([]);
   const [selectedShift, setSelectedShift] = useState("");
   const [assignedShift, setAssignedShift] = useState(null);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskInput, setTaskInput] = useState("");
+  const [taskList, setTaskList] = useState([]);
+  const [taskSubmitting, setTaskSubmitting] = useState(false);
+  const [pendingTaskAttendanceId, setPendingTaskAttendanceId] = useState(null);
+  const [pendingLogoutOfflineId, setPendingLogoutOfflineId] = useState(null);
+  const taskInputRef = useRef(null);
 
   // Fetch areas of allocation
   useEffect(() => {
@@ -312,6 +323,86 @@ const Dashboard = () => {
       console.error("Attendance error:", error);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleEndShift = async () => {
+    if (!taskList.length) {
+      toast.error("Add at least one task before ending your shift");
+      return;
+    }
+    setTaskSubmitting(true);
+    try {
+      let attendanceId = pendingTaskAttendanceId;
+      if (!attendanceId && !isOnline) {
+        let coords = currentLocation;
+        try { coords = await getCurrentLocation(); setCurrentLocation(coords); } catch {}
+        const offlineRecords = await offlineStore.getItem("pendingRecords") || [];
+        offlineRecords.push({
+          action: "logout",
+          latitude: coords?.latitude || null,
+          longitude: coords?.longitude || null,
+          area_of_allocation: selectedArea,
+          offline_id: `offline_${Date.now()}`,
+          tasks: taskList,
+        });
+        await offlineStore.setItem("pendingRecords", offlineRecords);
+        setPendingSync(offlineRecords.length);
+        setStatus({ is_on_duty: false, last_action: "logout", last_timestamp: new Date().toISOString() });
+        setSelectedArea("");
+        setSelectedShift("");
+        setShowTaskModal(false);
+        toast.info("Shift and tasks saved offline. They will sync when you reconnect.");
+        return;
+      }
+
+      if (!attendanceId) {
+        let coords = currentLocation;
+        try { coords = await getCurrentLocation(); setCurrentLocation(coords); } catch {}
+        const offlineId = pendingLogoutOfflineId || `offline_${Date.now()}`;
+        setPendingLogoutOfflineId(offlineId);
+        const response = await authFetch(`${API}/attendance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            latitude: coords?.latitude || null,
+            longitude: coords?.longitude || null,
+            area_of_allocation: selectedArea,
+            offline_id: offlineId,
+          }),
+          credentials: "include",
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "Failed to record attendance");
+        if (result.action !== "logout" || !result.attendance_id) {
+          setPendingLogoutOfflineId(null);
+          await fetchStatus();
+          throw new Error("The server did not record an end-of-shift action. Please check your status and try again.");
+        }
+        attendanceId = result.attendance_id;
+        setPendingTaskAttendanceId(attendanceId);
+        setSelectedArea("");
+        setSelectedShift("");
+        await fetchStatus();
+      }
+
+      const taskResponse = await authFetch(`${API}/attendance/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attendance_id: attendanceId, tasks: taskList }),
+        credentials: "include",
+      });
+      const taskResult = await taskResponse.json();
+      if (!taskResponse.ok) throw new Error(taskResult.detail || "Shift ended, but tasks could not be saved. Retry to save them.");
+      setPendingTaskAttendanceId(null);
+      setPendingLogoutOfflineId(null);
+      setShowTaskModal(false);
+      toast.success("Shift ended and tasks recorded.");
+    } catch (error) {
+      toast.error(error.message || "Could not end shift. Please try again.");
+      console.error("End shift error:", error);
+    } finally {
+      setTaskSubmitting(false);
     }
   };
 
@@ -675,7 +766,13 @@ const Dashboard = () => {
 
           {/* End Shift Button */}
           <button
-            onClick={() => handleAttendance("logout")}
+            onClick={() => {
+              if (!pendingTaskAttendanceId) {
+                setTaskList([]);
+                setTaskInput("");
+              }
+              setShowTaskModal(true);
+            }}
             disabled={actionLoading || !isOnDuty}
             className={`action-button-logout h-32 md:h-40 flex flex-col items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${!isOnDuty ? 'opacity-50' : ''}`}
             data-testid="end-shift-btn"
@@ -708,6 +805,67 @@ const Dashboard = () => {
           </Card>
         )}
       </main>
+
+      <Dialog open={showTaskModal} onOpenChange={(open) => {
+        if (!taskSubmitting && !(pendingTaskAttendanceId && !open)) setShowTaskModal(open);
+      }}>
+        <DialogContent className="max-w-md w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-800">
+              <ClipboardList className="h-5 w-5 text-teal-600" />
+              What did you accomplish today?
+            </DialogTitle>
+            <p className="mt-1 text-sm text-slate-500">Record at least one task before ending your shift.</p>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Input
+              ref={taskInputRef}
+              value={taskInput}
+              maxLength={200}
+              onChange={(event) => setTaskInput(event.target.value)}
+              placeholder="e.g. Conducted morning ward rounds"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && taskInput.trim() && taskList.length < 20) {
+                  event.preventDefault();
+                  setTaskList((tasks) => [...tasks, taskInput.trim()]);
+                  setTaskInput("");
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              aria-label="Add task"
+              disabled={!taskInput.trim() || taskList.length >= 20}
+              onClick={() => {
+                if (!taskInput.trim()) return;
+                setTaskList((tasks) => [...tasks, taskInput.trim()]);
+                setTaskInput("");
+                taskInputRef.current?.focus();
+              }}
+            ><Plus className="h-4 w-4" /></Button>
+          </div>
+          <p className="text-xs text-slate-400">Up to 20 tasks, 200 characters each.</p>
+          {taskList.length > 0 ? (
+            <div className="max-h-52 space-y-1.5 overflow-y-auto pr-1">
+              {taskList.map((task, index) => (
+                <div key={`${index}-${task}`} className="flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                  <span className="mt-0.5 shrink-0 font-mono text-xs text-teal-600">{index + 1}.</span>
+                  <span className="flex-1 break-words text-sm text-slate-700">{task}</span>
+                  <button type="button" className="shrink-0 text-slate-400 hover:text-red-500" aria-label={`Remove task ${index + 1}`} onClick={() => setTaskList((tasks) => tasks.filter((_, i) => i !== index))}><X className="h-4 w-4" /></button>
+                </div>
+              ))}
+            </div>
+          ) : <p className="py-3 text-center text-sm text-slate-400">Add at least one task to continue.</p>}
+          {pendingTaskAttendanceId && <p role="status" className="text-sm text-amber-700">Your shift has ended. Save the task list to complete this step.</p>}
+          <DialogFooter>
+            <Button variant="outline" disabled={taskSubmitting || Boolean(pendingTaskAttendanceId)} onClick={() => setShowTaskModal(false)}>Cancel</Button>
+            <Button className="bg-red-600 text-white hover:bg-red-700" disabled={!taskList.length || taskSubmitting} onClick={handleEndShift}>
+              {taskSubmitting ? "Saving..." : pendingTaskAttendanceId ? "Retry task save" : "End Shift"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

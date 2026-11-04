@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { API, authFetch, clearStoredToken, setStoredToken } from '../lib/api'
 import PrivacyPolicy from './PrivacyPolicy'
 import TermsAndConditions from './TermsAndConditions'
+import Logo from '@/components/Logo'
 
 // ─── Searchable Dropdown Component ───────────────────────────────────────────
 
@@ -372,11 +373,7 @@ export default function Register() {
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 mb-2">
-            <img src="/logo192.png" alt="VChron" className="w-10 h-10 rounded-xl object-contain" />
-            <span className="text-2xl font-bold text-teal-800">VChron</span>
-          </div>
-          <p className="text-slate-500 text-sm">Verified Workforce Intelligence</p>
+          <div className="flex justify-center"><Logo size="lg" /></div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8">

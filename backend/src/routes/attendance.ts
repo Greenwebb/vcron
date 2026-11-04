@@ -12,6 +12,36 @@ async function getShiftConfig() {
   return config
 }
 
+function normalizeShiftTasks(tasks: unknown) {
+  if (!Array.isArray(tasks) || tasks.length === 0 || tasks.length > 20) return null
+  const clean = tasks.map((task) => typeof task === 'string' ? task.trim() : '')
+  if (clean.some((task) => task.length === 0 || task.length > 200)) return null
+  return clean.map((text, index) => ({ text, order: index + 1 }))
+}
+
+async function saveShiftTasks(attendanceId: string, user: any, tasks: unknown, facility?: string | null) {
+  const payload = normalizeShiftTasks(tasks)
+  if (!payload) throw new Error('Tasks must contain 1-20 non-empty items of at most 200 characters')
+  const existing = await prisma.shiftTask.findFirst({ where: { attendance_id: attendanceId } })
+  if (existing) {
+    await prisma.shiftTask.update({
+      where: { task_id: existing.task_id },
+      data: { tasks: payload, submitted_at: new Date() },
+    })
+    return existing.task_id
+  }
+  const record = await prisma.shiftTask.create({
+    data: {
+      attendance_id: attendanceId,
+      user_id: user.user_id,
+      user_name: user.name,
+      facility: user.facility || facility || '',
+      tasks: payload,
+    },
+  })
+  return record.task_id
+}
+
 export default async function attendanceRoutes(fastify: FastifyInstance) {
   // GET /api/shifts/available
   // Returns all defined shifts plus the user's pre-assigned shift (if any).
@@ -140,6 +170,15 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       if (offline_id) {
         const existing = await prisma.attendance.findUnique({ where: { offline_id } })
         if (existing) {
+          if (existing.user_id !== user.user_id) {
+            return reply.code(409).send({ detail: 'Offline record belongs to another user' })
+          }
+          if (rec.tasks !== undefined) {
+            if (existing.action !== 'logout') {
+              return reply.code(400).send({ detail: 'Tasks can only be attached to an end-of-shift record' })
+            }
+            await saveShiftTasks(existing.attendance_id, user, rec.tasks, existing.facility)
+          }
           results.push({ offline_id, status: 'already_synced', attendance_id: existing.attendance_id })
           continue
         }
@@ -153,7 +192,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       const attendanceId = `att_${uuidv4().replace(/-/g, '').slice(0, 12)}`
       const ts = rec.timestamp ? new Date(rec.timestamp) : new Date()
 
-      await prisma.attendance.create({
+      const attendance = await prisma.attendance.create({
         data: {
           attendance_id: attendanceId,
           offline_id: offline_id || null,
@@ -171,7 +210,14 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
         },
       })
 
-      results.push({ offline_id, status: 'synced', attendance_id: attendanceId })
+      if (rec.tasks !== undefined) {
+        if (action !== 'logout') {
+          return reply.code(400).send({ detail: 'Tasks can only be attached to an end-of-shift record' })
+        }
+        await saveShiftTasks(attendance.attendance_id, user, rec.tasks, attendance.facility)
+      }
+
+      results.push({ offline_id, status: 'synced', attendance_id: attendance.attendance_id })
     }
 
     return reply.send({ synced: results.filter((r) => r.status === 'synced').length, results })
@@ -237,15 +283,8 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ detail: 'Maximum 20 tasks allowed' })
     }
 
-    // Validate each task is a non-empty string within 200 chars
-    const cleanTasks = tasks
-      .map((t: any) => (typeof t === 'string' ? t.trim() : ''))
-      .filter((t: string) => t.length > 0)
-      .slice(0, 20)
-
-    if (cleanTasks.length === 0) {
-      return reply.code(400).send({ detail: 'At least one non-empty task is required' })
-    }
+    const taskPayload = normalizeShiftTasks(tasks)
+    if (!taskPayload) return reply.code(400).send({ detail: 'Tasks must contain 1-20 non-empty items of at most 200 characters' })
 
     // Verify the attendance record belongs to this user
     const attRecord = await prisma.attendance.findUnique({
@@ -255,12 +294,14 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ detail: 'Attendance record not found' })
     }
 
+    if (attRecord.action !== 'logout') {
+      return reply.code(400).send({ detail: 'Tasks can only be submitted for an end-of-shift record' })
+    }
+
     // Upsert: if tasks already submitted for this attendance_id, update them
     const existing = await prisma.shiftTask.findFirst({
       where: { attendance_id },
     })
-
-    const taskPayload = cleanTasks.map((text: string, i: number) => ({ text, order: i + 1 }))
 
     if (existing) {
       await prisma.shiftTask.update({
